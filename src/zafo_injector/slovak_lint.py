@@ -32,7 +32,7 @@ def _phrase_pattern(phrase: str) -> re.Pattern[str]:
 def lint_candidate(text: str, doc: FrameDocument, rules: LexiconRules) -> LintReport:
     issues: list[LintIssue] = []
     words = len(_WORDS.findall(text))
-    paragraphs = list(re.finditer(r"\S(?:.*?\S)?(?=\n\s*\n|\s*\Z)", text, re.DOTALL))
+    paragraphs = list(re.finditer(r"\S.*?(?=\r?\n[^\S\r\n]*\r?\n|\s*\Z)", text, re.DOTALL))
 
     def add(rule: str, match: str, suggestion: str, offset: int = 0, *, warn: bool = False) -> None:
         issues.append(

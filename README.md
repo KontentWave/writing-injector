@@ -49,7 +49,13 @@ The script creates `.env`, `TIER4_ADDON.txt`, and `output`. It extracts the firs
 fenced block from lexicon section 6. Existing `.env` and filled addon files are
 preserved; an empty addon is populated. `-Force` explicitly resets both files,
 including the API key placeholder. `-VaultDir` and `-LexiconPath` override defaults.
+Relative paths resolve from PowerShell's current filesystem location, including
+after `Set-Location`; they do not depend on the process working directory.
+Bootstrap returns exit code 0 on success and 2 on failure, including repeated
+invocations in the same PowerShell session.
 Invalid source formats fail before any vault files are created.
+Section headings inside fenced Markdown examples are ignored when locating
+the addon skeleton.
 
 Set `OPENROUTER_API_KEY` manually in the vault `.env` or process environment.
 Process environment takes precedence; loading `.env` does not mutate it.
@@ -112,12 +118,13 @@ colored, including when `NO_COLOR` is set.
 The included [fixtures](tests/fixtures) demonstrate the currently supported format:
 
 - One metadata HTML comment before the slot containing `POV: Male (-l som)` or
-  `POV: Female (-la som)`.
+  `POV: Female (-la som)`. Duplicate POV fields, even in one comment, fail.
 - Exactly one `<!-- [TIER ... INSERT SLOT: 140–220 slov] ... -->` comment.
   Hyphens and en dashes work; omitted bounds default to 140–220.
+  Explicit bounds must use `: MIN-MAX slov` without trailing text.
   Malformed/reversed bounds and missing/duplicate slots fail explicitly.
 - Up to two blank-line-separated prose paragraphs on each side, excluding HTML
-  comments and ATX headings.
+  comments, ATX headings, and the leading UTF-8 BOM.
 - Style sheet sections numbered 1 and 6; lexicon sections numbered 3 and 4.
   ATX headings such as `## 1. Title`, `## 1\. Title`, and `## §1 Title`
   are supported. Subsections and headings inside fenced examples are preserved.
@@ -133,6 +140,7 @@ The linter counts letter-based words (including hyphenated words), requires
 2–4 nonempty paragraphs, warns above 4 punctuation-delimited sentences per
 paragraph, checks literal lexicon rules, narrator gender patterns, and exact
 boundary echoes. Slovak `„...“` dialogue is excluded from gender checks.
+Blank-line paragraph boundaries support LF/CRLF and trailing spaces or tabs.
 These are deterministic heuristics, not a full Slovak morphological analyzer.
 Score is exactly `100 - 25 * errors - 5 * warnings` (not clamped).
 
@@ -152,3 +160,20 @@ the original source text for lossless splicing. `CandidateResult` holds the
 Tests block real HTTP transports. BDD features cover vault rejection, parsing,
 Slovak ranking, and end-to-end mocked injection. PowerShell bootstrap and Windows
 junction tests use only temporary synthetic locations, never the real vault.
+Both installed CLI entrypoints are also exercised as subprocesses in dry-run and
+lint-only modes, including failure exit codes and unchanged BOM/CRLF sources.
+Generation remains in-process with mocked HTTP; no automated test validates live
+provider behavior, response quality, latency, or cost.
+
+### Human acceptance
+
+- **Offline:** choose an unsynchronized location outside D: and the workspace;
+  bootstrap a disposable synthetic vault with explicit paths, check idempotence
+  and `-Force`, then exercise both CLI entrypoints with `--dry-run` and
+  `--lint-only`. Review strict exit codes, redacted output, and unchanged sources.
+- **Optional live test (human only):** use synthetic Tier-1 inputs and an explicit
+  disposable vault. Configure credentials privately and acknowledge that frame
+  context, style anchors, instructions, and any addon are sent to OpenRouter.
+  Check provider/model availability, successful generation, lint review, output
+  containment, no-overwrite behavior, and billing. Do not infer production
+  readiness from offline or mocked results.

@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from zafo_injector import cli
+from zafo_injector import renderer as renderer_module
 from zafo_injector.config import AirGapViolationError
 from zafo_injector.models import CandidateResult, FrameDocument
 from zafo_injector.openrouter_client import OpenRouterError
@@ -203,3 +204,109 @@ def test_default_source_paths_follow_frame(tmp_path: Path, fixtures: Path, vault
     frame_path = blog / "posts" / "post.md"
     frame_path.write_bytes((fixtures / "frame.md").read_bytes())
     assert cli.main([str(frame_path), "--vault-dir", str(vault), "--dry-run"]) == 0
+
+
+def test_staging_failure_cleans_temporary_files(
+    frame: FrameDocument,
+    rules: LexiconRules,
+    candidate: str,
+    vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create = renderer_module.tempfile.NamedTemporaryFile
+    calls = 0
+
+    def fail_second(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("Synthetic staging failure.")
+        return create(*args, **kwargs)
+
+    monkeypatch.setattr(renderer_module.tempfile, "NamedTemporaryFile", fail_second)
+    result = CandidateResult(1, candidate, lint_candidate(candidate, frame, rules))
+    with pytest.raises(OSError, match="staging failure"):
+        render_outputs(frame, [result], vault / "output", vault_dir=vault, workspace_root=WORKSPACE)
+    assert list((vault / "output").iterdir()) == []
+
+
+def test_publish_conflict_preserves_competing_file(
+    frame: FrameDocument,
+    rules: LexiconRules,
+    candidate: str,
+    vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    link = os.link
+    calls = 0
+
+    def competing_link(source: Path, target: Path) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            target.write_bytes(b"Synthetic competing draft.")
+        link(source, target)
+
+    monkeypatch.setattr(os, "link", competing_link)
+    result = CandidateResult(1, candidate, lint_candidate(candidate, frame, rules))
+    with pytest.raises(FileExistsError):
+        render_outputs(frame, [result], vault / "output", vault_dir=vault, workspace_root=WORKSPACE)
+    remaining = list((vault / "output").iterdir())
+    assert remaining == [vault / "output" / "frame.merged.md"]
+    assert remaining[0].read_bytes() == b"Synthetic competing draft."
+
+
+@pytest.mark.parametrize("reject_on_call", [2, 4])
+def test_output_boundary_is_revalidated_before_staging_and_publication(
+    frame: FrameDocument,
+    rules: LexiconRules,
+    candidate: str,
+    vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reject_on_call: int,
+) -> None:
+    validate = renderer_module.validate_output_dir
+    calls = 0
+
+    def changed_boundary(output: Path, vault_dir: Path, workspace_root: Path) -> Path:
+        nonlocal calls
+        calls += 1
+        if calls == reject_on_call:
+            raise AirGapViolationError("Synthetic changed output boundary.")
+        return validate(output, vault_dir, workspace_root)
+
+    monkeypatch.setattr(renderer_module, "validate_output_dir", changed_boundary)
+    result = CandidateResult(1, candidate, lint_candidate(candidate, frame, rules))
+    with pytest.raises(AirGapViolationError, match="changed output"):
+        render_outputs(frame, [result], vault / "output", vault_dir=vault, workspace_root=WORKSPACE)
+    assert calls == reject_on_call
+    assert list((vault / "output").iterdir()) == []
+
+
+def test_partial_http_failure_produces_no_drafts(
+    cli_args: list[str], vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+
+    from zafo_injector.openrouter_client import OpenRouterClient
+
+    lock = threading.Lock()
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        with lock:
+            calls += 1
+            index = calls
+        return httpx.Response(
+            401 if index == 2 else 200,
+            json={"choices": [{"message": {"content": "Synthetic coffee."}}]},
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        monkeypatch.setattr(
+            cli, "OpenRouterClient", lambda key: OpenRouterClient(key, client=client)
+        )
+        assert cli.main(cli_args) == 4
+    assert calls == 3
+    assert not (vault / "output").exists()

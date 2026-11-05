@@ -10,8 +10,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Get-AbsolutePath([string]$Path) {
+    $providerPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    return [IO.Path]::GetFullPath($providerPath)
+}
+
 function Get-CanonicalPath([string]$Path) {
-    $full = [IO.Path]::GetFullPath($Path)
+    $full = Get-AbsolutePath $Path
     if (Test-Path -LiteralPath $full) {
         $item = Get-Item -LiteralPath $full -Force
         if ($item.LinkType) {
@@ -26,8 +31,9 @@ function Get-CanonicalPath([string]$Path) {
 }
 
 function Assert-SafePath([string]$Path) {
-    $canonical = Get-CanonicalPath $Path
-    if ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Path)).Replace('\\?\', '') -ieq 'D:\' -or
+    $full = Get-AbsolutePath $Path
+    $canonical = Get-CanonicalPath $full
+    if ([IO.Path]::GetPathRoot($full).Replace('\\?\', '') -ieq 'D:\' -or
         [IO.Path]::GetPathRoot($canonical).Replace('\\?\', '') -ieq 'D:\') {
         throw 'All of drive D: is forbidden for vault storage.'
     }
@@ -77,13 +83,22 @@ try {
     if ($writeAddon) {
         $lexicon = [IO.File]::ReadAllText((Get-CanonicalPath $LexiconPath))
         $inSection = $false
+        $outerFence = ''
         $fence = ''
         $complete = $false
         $sectionLevel = 0
         $lines = [Collections.Generic.List[string]]::new()
         foreach ($line in [regex]::Split($lexicon, '\r?\n')) {
             if (-not $inSection) {
-                if ($line -match '^(#{1,6})\s+(?:§\s*)?6(?:\\?\.[\s\S]*|[ ):\t][\s\S]*|$)') {
+                if ($outerFence) {
+                    if ($line -match '^ {0,3}(`{3,}|~{3,})\s*$' -and
+                        $Matches[1][0] -eq $outerFence[0] -and
+                        $Matches[1].Length -ge $outerFence.Length) {
+                        $outerFence = ''
+                    }
+                } elseif ($line -match '^ {0,3}(`{3,}|~{3,})') {
+                    $outerFence = $Matches[1]
+                } elseif ($line -match '^(#{1,6})\s+(?:§\s*)?6(?:\\?\.[\s\S]*|[ ):\t][\s\S]*|$)') {
                     $inSection = $true
                     $sectionLevel = $Matches[1].Length
                 }
@@ -112,6 +127,7 @@ try {
     }
     if ($writeAddon) { [IO.File]::WriteAllText($addonPath, $addon, $encoding) }
     Write-Output '[PASS] Vault initialized. Existing filled files preserved unless -Force was supplied.'
+    exit 0
 } catch {
     Write-Error -Message '[FAIL] Vault initialization failed. Check path boundaries, permissions, and lexicon format.' -ErrorAction Continue
     exit 2

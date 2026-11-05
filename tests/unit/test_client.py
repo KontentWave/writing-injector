@@ -157,3 +157,77 @@ def test_invalid_json_is_reported() -> None:
             OpenRouterClient("test", client=transport).generate_candidates(
                 MESSAGES, ModelParams(), 1
             )
+
+
+def test_concurrency_is_capped_at_three() -> None:
+    lock = threading.Lock()
+    ready = threading.Event()
+    active = maximum = count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal active, maximum, count
+        with lock:
+            count += 1
+            active += 1
+            maximum = max(maximum, active)
+            if active == 3:
+                ready.set()
+        assert ready.wait(timeout=5)
+        with lock:
+            active -= 1
+        return httpx.Response(200, json={"choices": [{"message": {"content": "Coffee."}}]})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as transport:
+        assert (
+            OpenRouterClient("test", client=transport).generate_candidates(
+                MESSAGES, ModelParams(), 7
+            )
+            == ["Coffee."] * 7
+        )
+    assert maximum == 3
+    assert count == 7
+
+
+def test_partial_request_failure_aborts_entire_batch() -> None:
+    barrier = threading.Barrier(3)
+    lock = threading.Lock()
+    count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal count
+        with lock:
+            count += 1
+            index = count
+        barrier.wait(timeout=5)
+        if index == 2:
+            return httpx.Response(401, text="SYNTHETIC_PRIVATE_RESPONSE")
+        return httpx.Response(200, json={"choices": [{"message": {"content": "Coffee."}}]})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as transport:
+        with pytest.raises(OpenRouterError, match="HTTP 401") as error:
+            OpenRouterClient("test", client=transport).generate_candidates(
+                MESSAGES, ModelParams(), 3
+            )
+    assert count == 3
+    assert "SYNTHETIC_PRIVATE_RESPONSE" not in str(error.value)
+
+
+def test_production_client_disables_proxies_and_redirects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_client = httpx.Client
+    settings: dict[str, object] = {}
+
+    def factory(**kwargs: object) -> httpx.Client:
+        settings.update(kwargs)
+        return real_client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200, json={"choices": [{"message": {"content": "Coffee."}}]}
+                )
+            )
+        )
+
+    monkeypatch.setattr(httpx, "Client", factory)
+    assert OpenRouterClient("test").generate_candidates(MESSAGES, ModelParams(), 1) == ["Coffee."]
+    assert settings == {"timeout": 45, "follow_redirects": False, "trust_env": False}

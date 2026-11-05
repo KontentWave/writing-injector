@@ -14,6 +14,7 @@ _SLOT = re.compile(r"^\s*\[TIER\b[^\]\r\n]*\bINSERT SLOT\b", re.IGNORECASE)
 
 
 def _paragraphs(text: str) -> tuple[str, ...]:
+    text = text.removeprefix("\ufeff")
     text = _COMMENTS.sub("\n\n", text)
     text = re.sub(r"^#{1,6}\s+.*$", "\n\n", text, flags=re.MULTILINE)
     return tuple(part.strip() for part in re.split(r"\n\s*\n", text) if part.strip())
@@ -34,6 +35,8 @@ def parse_frame(markdown_text: str, source_path: Path, window_paragraphs: int = 
     ]
     if len(metadata) != 1:
         raise SlotParseError("Expected one explicit POV metadata comment before the slot.")
+    if len(re.findall(r"\bPOV\s*:", metadata[0], re.I)) != 1:
+        raise SlotParseError("Expected exactly one POV field in the metadata comment.")
     pov_match = re.search(r"\bPOV\s*:\s*(male|female)\b", metadata[0], re.I)
     if not pov_match:
         raise SlotParseError("POV must explicitly specify Male or Female.")
@@ -42,10 +45,11 @@ def parse_frame(markdown_text: str, source_path: Path, window_paragraphs: int = 
     header, separator, instructions = body.partition("]")
     if not separator:
         raise SlotParseError("Slot header must end with ].")
-    bounds = re.search(r"(\d+)\s*[-–]\s*(\d+)\s+slov\b", header, re.I)
+    target = re.split(r"INSERT SLOT", header, flags=re.I)[1].strip()
+    bounds = re.fullmatch(r":\s*(\d+)\s*[-–]\s*(\d+)\s+slov", target, re.I)
     if bounds:
         low, high = map(int, bounds.groups())
-    elif re.search(r"\d|\bslov\b", re.split(r"INSERT SLOT", header, flags=re.I)[1], re.I):
+    elif target:
         raise SlotParseError("Malformed slot word bounds.")
     else:
         low, high = 140, 220

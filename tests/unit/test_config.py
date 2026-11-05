@@ -112,10 +112,13 @@ def test_junction_to_workspace_is_rejected(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows junction containment")
-def test_output_junction_outside_vault_is_rejected(vault: Path, tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", ["output", ".env", "TIER4_ADDON.txt"])
+def test_child_junction_outside_vault_is_rejected(vault: Path, tmp_path: Path, name: str) -> None:
     target = tmp_path / "elsewhere"
     target.mkdir()
-    junction = vault / "output"
+    junction = vault / name
+    if junction.is_file():
+        junction.unlink()
     subprocess.run(
         [
             "pwsh",
@@ -128,6 +131,25 @@ def test_output_junction_outside_vault_is_rejected(vault: Path, tmp_path: Path) 
     )
     try:
         with pytest.raises(AirGapViolationError):
-            vault_child(vault, "output", WORKSPACE)
+            vault_child(vault, name, WORKSPACE)
+        if name == ".env":
+            with pytest.raises(AirGapViolationError):
+                VaultConfig.load(vault, WORKSPACE)
+        elif name == "output":
+            with pytest.raises(AirGapViolationError):
+                validate_output_dir(junction, vault, WORKSPACE)
     finally:
         junction.rmdir()
+
+
+def test_canonical_paths_and_explicit_vault_precedence(
+    vault: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ZAFO_VAULT_DIR", r"D:\must-not-be-accessed")
+    raw = vault / ".." / vault.name
+    config = VaultConfig.load(raw, WORKSPACE)
+    assert config.vault_dir == vault.resolve()
+    assert config.output_dir == vault.resolve() / "output"
+    assert validate_storage_path(tmp_path / "missing" / ".." / "new", WORKSPACE) == (
+        tmp_path / "new"
+    )

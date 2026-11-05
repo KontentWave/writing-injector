@@ -90,3 +90,36 @@ def test_numbered_section_preserves_headings_inside_fences() -> None:
     section = numbered_section(text, 6)
     assert "Keep this." in section
     assert "omit" not in section
+
+
+@pytest.mark.parametrize("bounds", ["-20–80 slov", "20–80 slov 90", "20–80 slov / 30–90 slov", ":"])
+def test_parser_rejects_partially_valid_bounds(frame: FrameDocument, bounds: str) -> None:
+    text = frame.source_text.replace("20–80 slov", bounds)
+    with pytest.raises(SlotParseError):
+        parse_frame(text, frame.source_path)
+
+
+def test_parser_rejects_duplicate_pov_in_one_comment(frame: FrameDocument) -> None:
+    text = frame.source_text.replace("POV: Male (-l som)", "POV: Male\nPOV: Female")
+    with pytest.raises(SlotParseError):
+        parse_frame(text, frame.source_path)
+
+
+def test_bom_is_not_context(frame: FrameDocument) -> None:
+    text = "\ufeff<!-- POV: Male (-l som) -->\n# Heading\n\nBefore.\n\n"
+    text += frame.slot.raw_comment + "\n\nAfter."
+    doc = parse_frame(text, frame.source_path)
+    assert doc.context_before == ("Before.",)
+    assert doc.context_after == ("After.",)
+    assert doc.source_text == text
+    assert text[doc.slot.slot_start_idx : doc.slot.slot_end_idx] == doc.slot.raw_comment
+
+
+def test_fence_with_trailing_text_is_not_a_closing_fence() -> None:
+    text = (
+        "## 6. Prompt\n```text\nKeep.\n```not-a-close\n"
+        "## 7. Still an example\nKeep too.\n```\n## 7. Real section\nOmit."
+    )
+    section = numbered_section(text, 6)
+    assert "Keep too." in section
+    assert "Omit." not in section

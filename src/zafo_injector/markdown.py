@@ -18,7 +18,11 @@ def numbered_section(text: str, number: int) -> str:
             delimiter = marker.group(1)
             if not fence:
                 fence = delimiter
-            elif delimiter[0] == fence[0] and len(delimiter) >= len(fence):
+            elif (
+                delimiter[0] == fence[0]
+                and len(delimiter) >= len(fence)
+                and not line[marker.end() :].strip()
+            ):
                 fence = ""
         elif not fence:
             heading = _HEADING.match(text, offset)

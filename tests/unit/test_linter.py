@@ -91,3 +91,48 @@ def test_boundary_echo(frame: FrameDocument, rules: LexiconRules, candidate: str
 def test_phrase_boundaries(frame: FrameDocument, rules: LexiconRules, candidate: str) -> None:
     report = lint_candidate(candidate + " zrovnanie", frame, rules)
     assert not any(issue.rule_id == "CZECHISM" for issue in report.issues)
+
+
+@pytest.mark.parametrize("sentences", [4, 5])
+def test_exact_sentence_warning_threshold(
+    frame: FrameDocument, rules: LexiconRules, sentences: int
+) -> None:
+    text = "Ranná káva vonia. " * sentences + "\n\n" + "pokoj " * 12
+    report = lint_candidate(text, frame, rules)
+    assert report.passed
+    assert report.score == (100 if sentences == 4 else 95)
+
+
+def test_phrase_whitespace_boundaries_and_negative_score(
+    frame: FrameDocument, rules: LexiconRules, candidate: str
+) -> None:
+    text = candidate + "\n\n" + "UDĚLAL\tJSEM " * 5 + "xudělal jsem udělal jsemx"
+    report = lint_candidate(text, frame, rules)
+    matches = [issue for issue in report.issues if issue.rule_id == "CZECHISM"]
+    assert len(matches) == 5
+    assert all(issue.line == 5 for issue in matches)
+    errors = sum(issue.severity == "error" for issue in report.issues)
+    warnings = sum(issue.severity == "warn" for issue in report.issues)
+    assert report.score == 100 - 25 * errors - 5 * warnings < 0
+
+
+def test_multiline_dialogue_preserves_issue_line_numbers(
+    frame: FrameDocument, rules: LexiconRules
+) -> None:
+    text = "„Povedala som\nráno,“ povedal sused.\n\nPovedala som to potichu."
+    report = lint_candidate(text, frame, rules)
+    drift = [issue for issue in report.issues if issue.rule_id == "POV_DRIFT"]
+    assert len(drift) == 1
+    assert drift[0].line == 4
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+@pytest.mark.parametrize("count", [1, 2, 4, 5])
+def test_trailing_whitespace_does_not_merge_paragraphs(
+    frame: FrameDocument, rules: LexiconRules, newline: str, count: int
+) -> None:
+    text = (newline + " \t" + newline).join(["káva ráno okno stôl hrnček lyžica pokoj \t"] * count)
+    report = lint_candidate(text, frame, rules)
+    assert report.paragraph_count == count
+    bounds = [issue for issue in report.issues if issue.rule_id == "PARAGRAPH_BOUNDS"]
+    assert bool(bounds) == (not 2 <= count <= 4)
