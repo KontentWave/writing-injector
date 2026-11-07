@@ -94,6 +94,7 @@ zafo-injector/
 - Entire-drive `D:\` rejection supplements workspace, known Google Drive names, configured `GOOGLE_DRIVE_DIR`, and ancestor marker checks. Custom cloud mount discovery is not exhaustive.
 - Real upstream formats and live provider performance remain to be verified by a human; no real vault access or live generation was used during implementation.
 - Offline validation includes subprocess checks for both entrypoints, redirected vault children, staged-output failures, and partial mocked API failures. Parser bounds consume the complete target field, duplicate POV fields fail, and a leading BOM is excluded from context without changing source offsets. Markdown section discovery ignores fenced examples; lint paragraph boundaries tolerate trailing whitespace and LF/CRLF.
+- Prompts end with explicit Slovak-only, POV, inclusive word-bound, and paragraph requirements, with a midpoint word-count target. These override conflicting guidance in style examples, templates, scene instructions, or addons. Generation prints redacted per-candidate rule IDs and line numbers, including before strict failure; literal lexicon checks cannot detect all Czech vocabulary or grammar, and prompt compliance still requires human verification.
 
 <!-- PHASE_1_START -->
 

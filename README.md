@@ -84,9 +84,11 @@ Style and lexicon paths default to the frame's neighboring `blog\docs` directory
 (`post_path.parent.parent / "docs"`).
 
 Dry-run prints only redacted structure, POV, counts, and readiness; it does not
-print frame excerpts or a local addon. Lint-only prints rule IDs and line numbers,
-not the candidate text. Terminal messages are UTF-8, plain text, and never ANSI
-colored, including when `NO_COLOR` is set.
+print frame excerpts or a local addon. Lint-only and generation diagnostics print
+rule IDs and line numbers, not matched text or suggestions. Generation findings
+identify the candidate, including before a strict failure exits without drafts.
+Terminal messages are UTF-8, plain text, and never ANSI colored, including when
+`NO_COLOR` is set.
 
 ### Output and failure policy
 
@@ -98,11 +100,16 @@ colored, including when `NO_COLOR` is set.
 - Existing drafts are **never overwritten**. Move them before running again.
   Files are staged and atomically published without replacement; a failed second
   publication rolls back the first. There is no crash-atomic two-file transaction.
+  Conflict checks happen during rendering, so a repeated live request can still
+  incur charges before an existing draft prevents publication.
 - Any remote candidate failure fails the batch: no partial-success drafts.
   Errors show actionable, redacted messages without API response bodies.
 - Lint failures are review findings, not fatal by default. `--strict` returns 5
   and writes nothing if **all** candidates fail hard rules. A failed top-ranked
   draft is explicitly warned about. Lint-only uses 5 for a strict hard-rule failure.
+- Candidate summaries include score, word count, target bounds, and paragraph
+  count. Findings use `[FAIL]` for errors and `[WARN]` for warnings; matched text
+  and suggestions remain in the local candidate report.
 - Generated prose is not printed unless `--print-output` is explicitly supplied.
 
 | Exit | Meaning |
@@ -136,12 +143,22 @@ The included [fixtures](tests/fixtures) demonstrate the currently supported form
 - The fixed clinical/Harlequin denylist comes from the terms enumerated in the
   project specification, not automatic extraction from style section 4.
 
+Prompts end with an authoritative output contract: Slovak only (including
+dialogue), the frame's narrator POV, inclusive slot word bounds, and 2-4 nonempty
+paragraphs. The requested word-count target is the integer midpoint of the slot
+bounds. These requirements override conflicting guidance in style examples,
+templates, scene instructions, or the addon. Stronger wording does not guarantee
+model compliance; lint and human review remain necessary.
+
 The linter counts letter-based words (including hyphenated words), requires
 2–4 nonempty paragraphs, warns above 4 punctuation-delimited sentences per
 paragraph, checks literal lexicon rules, narrator gender patterns, and exact
 boundary echoes. Slovak `„...“` dialogue is excluded from gender checks.
 Blank-line paragraph boundaries support LF/CRLF and trailing spaces or tabs.
 These are deterministic heuristics, not a full Slovak morphological analyzer.
+Czechism detection covers configured literal terms and phrases only; unlisted
+Czech vocabulary or grammatical forms can escape detection. Passing lint does
+not certify natural Slovak.
 Score is exactly `100 - 25 * errors - 5 * warnings` (not clamped).
 
 Frozen dataclasses use tuples for context and issues, and `FrameDocument` retains
@@ -167,6 +184,10 @@ provider behavior, response quality, latency, or cost.
 
 ### Human acceptance
 
+The synthetic [style fixture](tests/fixtures/STYLE_SHEET.md) requests natural,
+standard written Slovak without colloquialisms for acceptance experiments.
+This is a test-only choice; other style sheets retain control of their register.
+
 - **Offline:** choose an unsynchronized location outside D: and the workspace;
   bootstrap a disposable synthetic vault with explicit paths, check idempotence
   and `-Force`, then exercise both CLI entrypoints with `--dry-run` and
@@ -174,6 +195,10 @@ provider behavior, response quality, latency, or cost.
 - **Optional live test (human only):** use synthetic Tier-1 inputs and an explicit
   disposable vault. Configure credentials privately and acknowledge that frame
   context, style anchors, instructions, and any addon are sent to OpenRouter.
+  Capture the source hash immediately before each run in the same PowerShell
+  session and compare afterward; a missing or stale baseline cannot establish
+  whether the source changed. Archive existing drafts inside the synthetic
+  vault's output directory before another request.
   Check provider/model availability, successful generation, lint review, output
   containment, no-overwrite behavior, and billing. Do not infer production
   readiness from offline or mocked results.

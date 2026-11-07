@@ -1,3 +1,4 @@
+import json
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -8,7 +9,7 @@ import pytest
 from zafo_injector import cli
 from zafo_injector import renderer as renderer_module
 from zafo_injector.config import AirGapViolationError
-from zafo_injector.models import CandidateResult, FrameDocument
+from zafo_injector.models import CandidateResult, FrameDocument, LintIssue, LintReport
 from zafo_injector.openrouter_client import OpenRouterError
 from zafo_injector.renderer import OutputError, render_outputs
 from zafo_injector.slovak_lint import LexiconRules, lint_candidate
@@ -102,6 +103,11 @@ def test_mocked_cli_complete(
 ) -> None:
     assert cli.main(cli_args) == 0
     assert len(mock_api) == 3
+    for request in mock_api:
+        system = json.loads(request.content)["messages"][0]["content"]
+        assert "Write only in Slovak, including dialogue." in system
+        assert "Word bounds: 20-80 words, inclusive." in system
+        assert "Aim for 50 words." in system
     assert len(list((vault / "output").glob("*.md"))) == 2
     assert candidate not in capsys.readouterr().out
 
@@ -110,10 +116,15 @@ def test_strict_all_fail_does_not_write(
     cli_args: list[str],
     vault: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(cli.OpenRouterClient, "generate_candidates", lambda *args: ["zrovna"])
     assert cli.main(cli_args + ["--strict"]) == 5
     assert not (vault / "output").exists()
+    captured = capsys.readouterr()
+    for rule in ("WORD_COUNT", "PARAGRAPH_BOUNDS", "CZECHISM"):
+        assert f"[FAIL] Candidate 1: {rule} line=1" in captured.out
+    assert "zrovna" not in captured.out + captured.err
 
 
 def test_api_failure_no_drafts(
@@ -310,3 +321,95 @@ def test_partial_http_failure_produces_no_drafts(
         assert cli.main(cli_args) == 4
     assert calls == 3
     assert not (vault / "output").exists()
+
+
+@pytest.mark.parametrize("strict", [False, True])
+@pytest.mark.parametrize(
+    ("kind", "word_count", "rule", "line"),
+    [("word-count", 103, "WORD_COUNT", 1), ("czechism", 21, "CZECHISM", 3)],
+)
+def test_generated_lint_findings_are_redacted_and_preserve_exit_policy_and_source(
+    cli_args: list[str],
+    vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    strict: bool,
+    kind: str,
+    word_count: int,
+    rule: str,
+    line: int,
+) -> None:
+    counts = (51, 52) if kind == "word-count" else (10, 10)
+    text = "\n\n".join(" ".join(["káva"] * count) for count in counts)
+    if kind == "czechism":
+        text += " zrovna"
+    monkeypatch.setattr(cli.OpenRouterClient, "generate_candidates", lambda *args: [text])
+    source = Path(cli_args[0])
+    before, modified = source.read_bytes(), source.stat().st_mtime_ns
+    args = cli_args + ["--candidates", "1"] + (["--strict"] if strict else [])
+    assert cli.main(args) == (5 if strict else 0)
+    captured = capsys.readouterr()
+    assert f"[FAIL] Candidate 1: {rule} line={line}" in captured.out
+    assert f"score=75; words={word_count}; target=20-80; paragraphs=2" in captured.out
+    for value in (text, "káva", "zrovna", "práve", "synthetic-test-key"):
+        assert value not in captured.out + captured.err
+    assert source.read_bytes() == before
+    assert source.stat().st_mtime_ns == modified
+    if strict:
+        assert not (vault / "output").exists()
+    else:
+        assert "[WARN] Selected draft has hard lint issues" in captured.err
+        assert sorted(path.name for path in (vault / "output").iterdir()) == [
+            "frame.candidates.md",
+            "frame.merged.md",
+        ]
+
+
+def test_generated_warning_is_redacted_and_not_a_strict_failure(
+    cli_args: list[str],
+    vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    text = ("káva ráno. " * 5).strip() + "\n\n" + ("káva " * 12).strip()
+    monkeypatch.setattr(cli.OpenRouterClient, "generate_candidates", lambda *args: [text])
+    assert cli.main(cli_args + ["--candidates", "1", "--strict"]) == 0
+    captured = capsys.readouterr()
+    assert "[PASS] Candidate 1: score=95; words=22" in captured.out
+    assert "[WARN] Candidate 1: PARAGRAPH_BOUNDS line=1" in captured.out
+    assert text not in captured.out + captured.err
+    assert "Use at most 4 sentences" not in captured.out + captured.err
+    assert len(list((vault / "output").glob("*.md"))) == 2
+
+
+@pytest.mark.parametrize("mode", ["lint-only", "generation"])
+def test_lint_diagnostics_do_not_print_matches_or_suggestions(
+    cli_args: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+) -> None:
+    text = "SYNTHETIC_CANDIDATE_SENTINEL"
+    report = LintReport(
+        21,
+        2,
+        (LintIssue("CZECHISM", "error", "SYNTHETIC_MATCH", "SYNTHETIC_SUGGESTION", 7),),
+        75,
+        False,
+    )
+    monkeypatch.setattr(cli, "lint_candidate", lambda *args: report)
+    if mode == "lint-only":
+        candidate = tmp_path / "synthetic-lint-input.txt"
+        candidate.write_text(text, encoding="utf-8")
+        args = cli_args + ["--lint-only", str(candidate), "--strict"]
+        prefix = "[FAIL] "
+    else:
+        monkeypatch.setattr(cli.OpenRouterClient, "generate_candidates", lambda *args: [text])
+        args = cli_args + ["--candidates", "1", "--strict"]
+        prefix = "[FAIL] Candidate 1: "
+    assert cli.main(args) == 5
+    captured = capsys.readouterr()
+    assert prefix + "CZECHISM line=7" in captured.out
+    for value in (text, "SYNTHETIC_MATCH", "SYNTHETIC_SUGGESTION", "synthetic-test-key"):
+        assert value not in captured.out + captured.err

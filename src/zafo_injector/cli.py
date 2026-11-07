@@ -5,7 +5,7 @@ from typing import TextIO
 
 from .config import AirGapViolationError, ConfigurationError, VaultConfig, vault_child
 from .markdown import SourceFormatError
-from .models import CandidateResult, ModelParams
+from .models import CandidateResult, LintReport, ModelParams
 from .openrouter_client import OpenRouterClient, OpenRouterError
 from .parser import SlotParseError, parse_frame
 from .prompt_builder import build_messages
@@ -24,6 +24,13 @@ def _positive(value: str) -> int:
     if number < 1:
         raise argparse.ArgumentTypeError("must be positive")
     return number
+
+
+def _print_lint_issues(report: LintReport, *, candidate_index: int | None = None) -> None:
+    owner = "" if candidate_index is None else f"Candidate {candidate_index}: "
+    for issue in report.issues:
+        prefix = "FAIL" if issue.severity == "error" else "WARN"
+        print(f"[{prefix}] {owner}{issue.rule_id} line={issue.line}")
 
 
 def _arguments() -> argparse.ArgumentParser:
@@ -63,9 +70,7 @@ def main(argv: list[str] | None = None) -> int:
             report = lint_candidate(args.lint_only.read_text(encoding="utf-8-sig"), doc, rules)
             status = "PASS" if report.passed else "FAIL"
             print(f"[{status}] words={report.word_count} score={report.score}")
-            for issue in report.issues:
-                prefix = "FAIL" if issue.severity == "error" else "WARN"
-                print(f"[{prefix}] {issue.rule_id} line={issue.line}")
+            _print_lint_issues(report)
             return 5 if args.strict and not report.passed else 0
         config = VaultConfig.load(args.vault_dir, workspace, require_api_key=not args.dry_run)
         if args.dry_run:
@@ -96,8 +101,11 @@ def main(argv: list[str] | None = None) -> int:
             status = "PASS" if candidate.report.passed else "FAIL"
             print(
                 f"[{status}] Candidate {candidate.index}: "
-                f"score={candidate.report.score}; words={candidate.report.word_count}"
+                f"score={candidate.report.score}; words={candidate.report.word_count}; "
+                f"target={doc.slot.min_words}-{doc.slot.max_words}; "
+                f"paragraphs={candidate.report.paragraph_count}"
             )
+            _print_lint_issues(candidate.report, candidate_index=candidate.index)
         if args.strict and not any(candidate.report.passed for candidate in ranked):
             print(
                 "[FAIL] All candidates failed hard lint rules; no output written.", file=sys.stderr
