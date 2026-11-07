@@ -6,7 +6,7 @@
 
 ## 1\. Current State ("As-Built" Present)
 
-- **Version:** `0.1.0` (Phase 1 implemented against synthetic fixtures; live integration unverified).  
+- **Version:** `0.1.0` (Phase 1 implemented and offline-validated; human-run synthetic API connectivity observed, but raw English generation acceptance remains unpassed).
 - **Implemented Modules:** Bootstrapper, frozen models, configuration/storage checks, language-aware parser/prompt builder/shared QA, OpenRouter client, renderer, CLI, and synthetic unit/BDD tests. Phase 1 supports explicit `--language sk|en` with Slovak remaining the default; no Phase 2 orchestration or track integration is implemented. See [README](../README.md) for executable commands and supported formats.  
 - **Upstream Content Interfaces (Read-Only):**  
   - Story frames: `../zafo-shorts/blog/posts/post_XXX.md` (e.g., `post_002.md`)  
@@ -16,6 +16,25 @@
   - **Confirmed constraint:** the whole `D:\` drive is forbidden for vault storage and generated output, including resolved links.  
   - Default vault path: `C:/Users/<User>/zafo-local/` (override via `ZAFO_VAULT_DIR`)  
   - Contains: `.env` (`OPENROUTER_API_KEY`), `TIER4_ADDON.txt`, and `output/`
+
+### Phase 1 Delivery, Validation & Acceptance Record
+
+- **Implementation baseline:** [PR #1](https://github.com/KontentWave/writing-injector/pull/1) merged as `7d5fe51`, retaining Slovak prompt/diagnostic commit `2daf039` and English-support commit `2a825bd`. The merged implementation tree matched the freshly validated feature tree.
+- **Completed offline quality gate:** 290 tests passed; Ruff lint and format checks passed (26 files already formatted); strict mypy passed for 11 source files. These were manual offline checks, not hosted CI results; PR #1 had no GitHub check results.
+- **Post-merge offline checks:** Slovak and English dry-run/strict lint-only checks passed across the module and console entrypoints. The Slovak fixture had 37 words and score 100; the English fixture had 50 words and score 100. No API calls, credential/addon reads, or vault/output writes occurred in those checks.
+- **Human-run evidence:** The following results came from human-provided terminal output using benign synthetic inputs, not assistant-executed live requests. Historical Slovak trials established reported API connectivity and strict structural passes, but human review found language-quality limitations. Neither those trials nor the English results below establish production readiness.
+
+The English fixture slot required 20-80 words:
+
+| Human English Run | Words | Paragraphs | Score | Exit | Outcome |
+|---|---|---|---|---|---|
+| Strict generation | 99 | 3 | 70 | 5 | Word-count failure; no drafts written. |
+| Non-strict diagnostic generation | 90 | 2 | 75 | 0 | Word-count failure; review report and merged diagnostic saved for manual review, not accepted output. |
+
+- The strict run also had a sentence-count warning: a paragraph exceeded four sentences. Three paragraphs themselves were within the allowed 2-4 range.
+- **Fixture control:** A separate copy of the existing English candidate fixture passed strict lint with 50 words, two paragraphs, and score 100. It was neither a shortened edit of the 90-word response nor a successful raw model output.
+- **Source and credential handling:** Both human generation runs reported unchanged fresh before/after frame, style, and synthetic-addon hashes, and cleanup of the terminal's process API key. Original diagnostic evidence was preserved inside the synthetic vault's output directory. No credentials, addons, draft prose, or private vault paths are recorded here.
+- **Remaining acceptance gap:** Raw English word-bound compliance remains unpassed. English QA is structural only; passing lint does not certify output language, grammar, POV, scene compliance, or natural writing. Provider availability, sustained performance, billing, and real upstream compatibility are not certified by these small synthetic trials.
 
 ---
 
@@ -94,7 +113,7 @@ zafo-injector/
 - `--language sk|en`, `--strict`, `--print-output`, `--style-sheet`, and `--lexicon` are implemented. Style defaults resolve relative to the frame's `posts` directory; only Slovak loads the neighboring lexicon. Explicit `--lexicon` in English is rejected with exit 2 before file/vault access. No language auto-detection is performed.
 - Any API failure aborts the batch without drafts. Existing drafts are not overwritten. Strict all-failed batches produce exit 5 without drafts; non-strict failures are explicitly reported.
 - Entire-drive `D:\` rejection supplements workspace, known Google Drive names, configured `GOOGLE_DRIVE_DIR`, and ancestor marker checks. Custom cloud mount discovery is not exhaustive.
-- Real upstream formats and live provider performance remain to be verified by a human; no real vault access or live generation was used during implementation.
+- Real upstream formats, sustained live provider performance, and billing remain to be verified by a human. The synthetic connectivity evidence above is not production acceptance; assistants accessed no real vault and executed no live generation.
 - Offline validation includes subprocess checks for both entrypoints, redirected vault children, staged-output failures, and partial mocked API failures. Parser bounds consume the complete target field, duplicate POV fields fail, and a leading BOM is excluded from context without changing source offsets. Markdown section discovery ignores fenced examples; lint paragraph boundaries tolerate trailing whitespace and LF/CRLF.
 - Prompts end with selected-language-only, POV, inclusive word-bound, paragraph, and prose-only requirements, with an integer midpoint word-count target. Slovak grammatical guidance is retained; English receives first-person POV guidance without Slovak endings. These override conflicting anchors while the style sheet controls writing register. Generation prints redacted per-candidate rule IDs and line numbers, including before strict failure.
 - Both languages reuse word/paragraph bounds, sentence warnings, exact boundary echoes, scoring, and ranking. Only Slovak applies `CZECHISM`, `CALQUE`, `CLINICAL_OR_HARLEQUIN`, and morphological `POV_DRIFT`. English does not check grammar, spelling, output language, narrative POV, or scene compliance. Passing lint does not certify natural language quality; human review remains required.
@@ -154,7 +173,7 @@ Deliver a tested, storage-isolated CLI pipeline that parses hybrid story frames,
 
 - **UTF-8 Slovak Diacritics Safety:** Explicitly reconfigure `sys.stdout` / `sys.stderr` to `utf-8` on Windows PowerShell so `ľ, š, č, ť, ž, ô, ä` never mojibake regardless of console codepage.  
 - **`NO_COLOR` & Plain-Text Screen-Reader Compatibility:** Respect the `NO_COLOR` environment variable; never rely solely on ANSI red/green colors—always emit explicit `[PASS]`, `[WARN]`, and `[FAIL]` text prefixes and aligned Markdown/ASCII summary tables.  
-- **Zero-Noise Exit Codes:** Standardize exit codes (`0` \= clean pass, `2` \= CLI/parse error, `3` \= air-gap security violation, `4` \= OpenRouter API failure, `5` \= all candidates failed hard lint rules when `--strict` is set).
+- **Zero-Noise Exit Codes:** Standardize exit codes (`0` \= completed operation, including non-strict diagnostics rather than guaranteed lint acceptance; `2` \= CLI/configuration/parse/output error; `3` \= air-gap security violation; `4` \= OpenRouter API failure; `5` \= strict lint failure).
 
 ### Test Plan (Unit, BDD & Integration — Using 100% Tier-1 Synthetic Fixtures)
 
@@ -199,25 +218,44 @@ Deliver a tested, storage-isolated CLI pipeline that parses hybrid story frames,
 
 ### Action
 
-Extend `zafo-injector` to run multi-model A/B comparisons (`magnum-v4-72b` vs. `deepseek-chat-v3-0324` vs. `l3.3-euryale-70b`) and auto-detect track rules for `zafo-shorts/serial` and `zafo-dark-romance`.
+Proposed sequencing: first build a narrowly scoped offline comparison arena (Phase 2A), then consider track integration separately (Phase 2B). This is a recorded recommendation, not completed work or authorization to start implementation. No Phase 2 orchestration or track integration is implemented.
 
-### Task (High-Level)
+### Phase 2A (Proposed): Offline Multi-Model Comparison Arena
 
-1. Add `--models m1,m2,...` matrix mode with per-model sampling presets (`ModelProfile` registry).  
-2. Auto-resolve track (`blog`, `serial`, `dark-romance`) from input path and load the corresponding `STYLE_SHEET.md`.  
-3. For `serial` episodes, add `CLEAN_TAIL_CHECK` linter rule verifying the closing 150–250w post-scene continuity beat is safe `Tier 1–2` text per `serial/docs/STYLE_SHEET.md` §2.
+1. Add opt-in `--models m1,m2,...` with a small validated `ModelProfile` registry. Preserve existing single-model defaults, `--model`, explicit `--language sk|en`, payload parameters, concurrency/retry policy, and execution modes when matrix mode is not selected.
+2. Reuse the language-aware parser, prompt assembly, QA, and deterministic ranking instead of duplicating pipelines. Compare identical synthetic frames, selected language, style, and bounds; record any model-specific sampling differences so comparisons do not imply a controlled model-only experiment.
+3. Make matrix mode report-only: per-model candidate review and scorecards, without automatically selecting or merging a winner. Report structural pass rates, word counts, warnings, and explicit failures; a high structural score is not a language-quality score.
+4. Use only benign Tier-1 fixtures, temporary synthetic vaults outside D:/workspace/cloud locations, and mocked HTTP during development. Preserve source immutability, output containment, no-overwrite/rollback behavior, redaction, and explicit-only candidate printing.
+5. Keep one global request/concurrency budget across all models, not independent nested worker pools. Human-only synthetic live benchmarking is a later, separately budgeted step; mocked results cannot prove real model compliance.
+
+### Phase 2B (Deferred): Track Integration & Continuity-Tail Checks
+
+1. Resolve `blog`, `serial`, and `dark-romance` tracks and corresponding style sheets only after a separate design and approval. Define explicit selection, any optional path inference, override precedence, and rejection of ambiguous paths; develop against synthetic layouts and styles, not real upstream prose or private addons.
+2. Define which text a `CLEAN_TAIL_CHECK` examines before implementing the proposed closing 150-250-word post-scene continuity check. Clarify whether the target is an existing episode tail or assembled output, not an unrelated short insertion candidate.
+3. Tail length, structure, and configured heuristics may be checked deterministically. Passing such a rule must not be represented as certification that prose is safe Tier 1-2 content; human safety and scene-compliance review remains necessary.
+4. Keep selected-language QA consistent. Track rules must not introduce Slovak lexicon or morphological checks into English mode.
+
+### Decisions Required Before Phase 2A Implementation
+
+- Verify full OpenRouter model IDs, current availability, supported parameters, and pricing from public metadata only. The original roster (`magnum-v4-72b`, `deepseek-chat-v3-0324`, `l3.3-euryale-70b`) contains unverified planning examples, not a confirmed current model list.
+- Specify model-list validation, `--model`/`--models` precedence or incompatibility, profile overrides, and matrix interactions with offline CLI modes.
+- Specify whether a model API failure aborts the whole matrix or produces an explicitly failed partial report, including exit status and output policy. Do not silently drop failures, substitute models, or present incomplete runs as success.
+- Define the total candidate/request budget and human live-benchmark acceptance criteria before implementation or paid testing. Record sampling settings and separate structural compliance from human language/scene review.
 
 ### Accessibility
 
-- Tabular model-vs-model scorecard in plain Markdown and terminal ASCII (`NO_COLOR` compliant).
+- Tabular model-vs-model scorecards in plain Markdown and terminal ASCII (`NO_COLOR` compliant). Terminal output remains metadata-only unless `--print-output` is explicitly requested; prose-bearing reports belong exclusively in the validated external vault's output directory.
 
 ### Test Plan
 
-- Named unit & BDD tests for track auto-detection, per-model parameter profiles, and `serial` continuity-tail linting.
+- Phase 2A: unit/BDD tests for model-list/profile validation, both CLI entrypoints and languages, mocked matrix execution, deterministic reports, explicit failures, global concurrency/retries, redaction, unchanged sources, and output transactions. Retain Phase 1 single-model regression coverage.
+- Phase 2B, only after separate approval: synthetic track-selection/path-inference tests and precisely scoped continuity-tail tests. No test result certifies semantic Tier 1-2 safety.
 
 ### Perf / Security Notes
 
-- Cap concurrent OpenRouter requests at `max_workers=4` to respect per-key rate limits.
+- Preserve the current three-request concurrency limit as the proposed global default. Raising it to four is not itself a guarantee of per-key rate-limit compliance; any change needs explicit approval and targeted validation.
+- Three models with three candidates each mean nine initial requests before retries. Define a total budget; preserve bounded retry policy and do not hide extra requests or potential costs.
+- Assistants never execute live generation or inspect private vaults, credentials, addons, or real upstream prose. Human live comparisons transmit assembled prompts to OpenRouter and may incur charges; storage isolation is not a network air gap.
 
 <!-- PHASE_2_END -->
 
