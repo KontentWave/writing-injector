@@ -3,6 +3,7 @@
 Python 3.12+ / PowerShell 7 CLI for Slovak and English prose slot parsing,
 deterministic QA, and optional OpenRouter candidate generation. Phase 1 uses
 explicit language selection: Slovak is the backward-compatible default.
+Phase 2A adds an opt-in, report-only multi-model comparison arena.
 Automated validation uses benign synthetic fixtures and mocked HTTP; it does
 not establish live English quality or production readiness.
 
@@ -89,7 +90,7 @@ the provider and are not guaranteed.
 is never auto-detected from prose, headers, filenames, or style sheets.
 Both entrypoints support the same flags and behavior.
 
-Other flags: `--candidates`, `--model`, `--temp`, `--min-p`, `--vault-dir`,
+Other flags: `--candidates`, `--model`, `--models`, `--temp`, `--min-p`, `--vault-dir`,
 `--style-sheet`, `--lexicon`, `--strict`, and `--print-output`.
 Style paths default to the frame's neighboring `blog\docs\STYLE_SHEET.md`
 (`post_path.parent.parent / "docs"`). Slovak mode also defaults to its neighboring
@@ -112,6 +113,8 @@ Terminal messages are UTF-8, plain text, and never ANSI colored, including when
 `NO_COLOR` is set.
 
 ### Output and failure policy
+
+Without `--models`, the existing Phase 1 policy is unchanged:
 
 - Writes only `<stem>.candidates.md` and `<stem>.merged.md` in the validated
   vault's `output` directory. Every candidate has a lint table and counts.
@@ -140,6 +143,136 @@ Terminal messages are UTF-8, plain text, and never ANSI colored, including when
 | 3 | Storage boundary violation |
 | 4 | OpenRouter failure |
 | 5 | Strict lint failure |
+
+## Phase 2A: Multi-Model Comparison Arena
+
+The following policies were approved on 2026-11-07 and implemented with offline,
+synthetic validation. Matrix mode compares the same parsed frame, style, selected
+language, assembled messages, and bounds. It never selects a winner or produces
+a merged draft. Phase 2B tracks/path detection, `CLEAN_TAIL_CHECK`, translation
+workflows, and Phase 3 UI are not implemented by this phase.
+
+### Static model profiles and argument policy
+
+Public catalog and per-model endpoint metadata were checked on 2026-11-07,
+without credentials or inference. All three IDs below had listed fp8 endpoints
+with status 0; that snapshot is not a guarantee of future availability or billing.
+
+| Full registered model ID | Matrix sampling support | Catalog input/output USD per million tokens |
+|---|---|---|
+| `anthracite-org/magnum-v4-72b` | temperature, top_p, min_p, repetition_penalty | 2.50 / 5.00 |
+| `deepseek/deepseek-chat-v3-0324` | temperature, top_p | 0.29 / 1.14 |
+| `sao10k/l3.1-euryale-70b` | temperature, top_p, min_p, repetition_penalty | 0.85 / 0.85 |
+
+The status-0 DeepSeek endpoint advertised 0.25 / 1.00, differing from the catalog
+aggregate. Sources: [public catalog](https://openrouter.ai/api/v1/models),
+[Magnum endpoints](https://openrouter.ai/api/v1/models/anthracite-org/magnum-v4-72b/endpoints),
+[DeepSeek endpoints](https://openrouter.ai/api/v1/models/deepseek/deepseek-chat-v3-0324/endpoints),
+and [Euryale endpoints](https://openrouter.ai/api/v1/models/sao10k/l3.1-euryale-70b/endpoints).
+The old planning ID `sao10k/l3.3-euryale-70b` was absent from the catalog and had
+zero endpoints. Its replacement with the listed **3.1** ID was explicitly approved;
+the CLI never silently substitutes a model.
+
+- `--models m1,m2,...` requires **2-3 exact, case-sensitive registered full IDs**.
+  Surrounding whitespace is trimmed; empty, duplicate, unknown, short, and retired
+  IDs are rejected. The registry is static: neither offline modes nor tests depend
+  on catalog lookup. A human must recheck public metadata before a future live run.
+- `--model` and `--models` are mutually exclusive, even if the explicit `--model`
+  equals the legacy default. Without `--models`, single-model IDs and payload
+  behavior remain unchanged; profiles are not applied to legacy `--model` runs.
+- All profiles default to temperature 0.68 and top_p 0.90. Magnum/Euryale also send
+  min_p 0.06 and repetition_penalty 1.05; DeepSeek omits these unsupported fields.
+  Explicit `--temp` overrides every profile. Explicit `--min-p` overrides every
+  profile only if **all** selected models support it; otherwise the command rejects
+  before source/vault access, even for `--min-p 0.06`.
+- Matrix requests retain allowed quantizations `bf16`, `fp16`, `fp8` and
+  `allow_fallbacks=true`, with matrix-only `require_parameters=true`. Provider
+  fallback must support the requested parameters and allowed quantizations; it
+  does not substitute another model. Profiles/settings and omissions are reported,
+  so differing sampling is not mislabeled a controlled model-only experiment.
+- `--candidates N` is the common per-model count, default 3. Matrix mode permits
+  **at most 9 initial requests** and **at most 27 HTTP attempts** per invocation.
+  Two models allow N=1-4; three allow N=1-3. There is one shared executor with a
+  maximum of three in-flight requests, 45-second request timeouts, and at most two
+  retries for 429/5xx with existing 0.5/1.0-second backoff. Transport/shape failures
+  are not retried. No new single-model candidate limit was introduced.
+- `--models --dry-run` validates profiles/overrides/budgets and prints redacted
+  readiness and effective settings without credentials/addon reads, requests, or
+  writes. `--models --lint-only` is rejected: linting one file is not a model
+  comparison. Language selection and English lexicon rejection remain unchanged.
+
+Safe synthetic previews through both entrypoints:
+
+```powershell
+# Choose a genuinely unsynchronized C: location outside the workspace.
+# Preview validates it and creates no vault or output files.
+$syntheticVault = Join-Path $env:LOCALAPPDATA ("Temp\zafo-arena-preview-" + [guid]::NewGuid().ToString('N'))
+$arenaModels = 'anthracite-org/magnum-v4-72b,deepseek/deepseek-chat-v3-0324,sao10k/l3.1-euryale-70b'
+.\.venv\Scripts\python.exe -m zafo_injector .\tests\fixtures\frame_en.md --language en --style-sheet .\tests\fixtures\STYLE_SHEET_EN.md --vault-dir $syntheticVault --models $arenaModels --dry-run
+.\.venv\Scripts\zafo-inject.exe .\tests\fixtures\frame.md --style-sheet .\tests\fixtures\STYLE_SHEET.md --lexicon .\tests\fixtures\SLOVAK_LEXICON.md --vault-dir $syntheticVault --models $arenaModels --dry-run
+```
+
+Only a separately authorized human may remove `--dry-run` for live generation.
+Storage isolation is not a network air gap: assembled prompts are transmitted to
+OpenRouter and requests/retries may incur charges.
+
+### Arena reports, schema, and failure policy
+
+Matrix mode writes exactly `<stem>.arena.md` and `<stem>.arena.json` in the
+validated vault's `output` directory. Markdown contains per-model scorecards,
+candidate prose, and local lint tables. JSON is metadata-only, with no candidate
+prose, assembled prompts, addons, keys, matched text/suggestions, or API bodies.
+Candidate identities are `<full-model-id>::candidate-<1-based-index>`.
+JSON preserves requested model order and candidate index order; Markdown ranks
+successful candidates **within each model** by the existing score/index rule,
+then includes explicit failed requests. There is no cross-model winner.
+
+JSON schema version 1:
+
+- Root: `schema_version`, `mode="arena"`, `status`, `exit_code`, `strict`,
+  `language`, `pov`, inclusive `bounds`, `qa`, `execution`, and `models`.
+- `qa`: unchanged score formula and explicit limitations. Scores are deterministic
+  structure plus Slovak-only configured heuristics, **not** grammar, prose-quality,
+  output-language, scene-compliance, or safety certification.
+- `execution`: per-model count, initial requests/limit, actual HTTP attempts,
+  attempt budget, concurrency cap, timeout, max retries, and retry backoff.
+- Each model: exact ID, status (`hard_pass`, `lint_findings`, `lint_failed`, or
+  `api_failed`), effective `sampling`, `omitted_sampling_parameters`, `provider`,
+  `scorecard`, and `candidates`.
+- Scorecard: `requested`, `succeeded`, `api_failed`, `hard_pass_count`,
+  `hard_pass_rate_requested`, `hard_error_count`, and `warning_count`.
+  Pass-rate denominators include **all requested candidates**, including failures.
+- Each candidate: stable ID, index, status, attempts, score, word/paragraph counts,
+  hard-pass flag, hard-error/warning counts, redacted rule/severity/line `issues`,
+  and `failure`. API failures have **null QA metrics/issues**, not fake zero scores;
+  `failure` contains only a safe code, optional HTTP status, and redacted message.
+
+Every planned request remains represented, including partial or complete API
+failure. Report status and process exit are explicit:
+
+| Matrix condition | Report status | Exit | Reports |
+|---|---|---|---|
+| Any API failure, with or without `--strict` | `api_failed` | 4 | Both explicitly failed reports |
+| No API failure, `--strict`, any model has zero hard-passing candidates | `strict_lint_failed` | 5 | Both explicitly strict-failed reports |
+| Otherwise, including non-strict hard lint findings | `completed` | 0 | Both review reports; findings remain explicit |
+| Local/config/publication failure | No completed publication | 2 | No partial pair from this invocation |
+| Storage boundary violation | No completed publication | 3 | No partial pair from this invocation |
+
+Exit 0 means the comparison completed, not that all candidates were accepted.
+Warnings alone do not fail strict mode. File/storage publication failures take
+precedence over the planned matrix exit. Phase 1's no-draft API/strict failure
+policy remains unchanged outside matrix mode.
+
+Both report files reuse the existing containment rechecks, exclusive atomic
+publication, no-overwrite policy, staging cleanup, and rollback if the second
+publication fails. This is not a crash-atomic two-file transaction. Conflicts are
+checked during rendering, after requests; repeated human live runs can incur
+charges before an existing report blocks publication. Input sources, including
+BOM/CRLF bytes, are never modified. Failed reports must also be archived or moved
+inside the vault's output directory before reusing the same filenames.
+Candidate prose prints only with explicit `--print-output`, **after both reports
+publish**; matrix mode then prints all successful candidates with identities,
+even in an explicitly failed comparison, never a selected winner.
 
 ## Source contracts and QA limits
 
@@ -230,6 +363,18 @@ exact bounds, prompts, structural QA, lexicon independence/rejection, redaction,
 ranking, output containment, no overwrites, and publication cleanup. Generation
 remains in-process with mocked HTTP; no automated test validates live provider
 behavior, response quality, latency, or cost.
+Phase 2A adds synthetic unit/BDD coverage for static profiles, exact budgets and
+overrides, report schema, both-language/entrypoint offline combinations, shared
+concurrency, attempts/retries, explicit API/strict failures, report-only behavior,
+redaction, hashes/immutable contracts, no overwrites, containment, rollback, and
+cleanup. Existing single-model regressions remain covered. See the
+[project sheet](<docs/project_sheet .md>) for the approval and validation record.
+
+Fresh manual offline gate on 2026-11-07: the clean Phase 1 baseline passed 290
+tests; the completed Phase 2A suite passed **519 tests**, Ruff lint/format passed
+(30 Python files), and strict mypy passed (12 source files). These are local
+synthetic/mocked checks, not hosted CI, live model acceptance, or production
+readiness evidence.
 
 ### Human acceptance
 
@@ -269,3 +414,29 @@ written English, with a 20-80-word slot and a 50-word, two-paragraph candidate.
   paragraphs, style register, continuity, and scene compliance manually.
   Human Slovak connectivity trials and mocked English passes are not proof of
   production readiness.
+
+### Phase 2A human-only benchmark: defined, not executed
+
+- Separately approve prompt transmission and a spending budget before any paid
+  run. Request caps do **not** enforce a dollar cap; advertised prices, response
+  token counts, provider availability, latency, and actual billing need human
+  verification.
+- Use the three approved models, three candidates each, once per language with
+  existing benign Tier-1 frame/style fixtures and unchanged bounds. That means
+  18 initial requests total and at most 54 HTTP attempts across two invocations.
+  Within each language compare identical frame/style/addon/messages/bounds and
+  record the effective sampling differences. Use explicit fresh unsynchronized
+  synthetic C: vaults, never the real default vault or upstream story prose.
+- Capture fresh source/style/addon hashes before and after, verify containment
+  and no overwrites, and record costs, latency, attempts, and failures locally
+  inside each synthetic vault's output directory.
+- Small-benchmark acceptance requires no API failures and **every raw candidate**
+  within inclusive word bounds and 2-4 paragraphs with all hard rules passing.
+  Review warnings and independently review every candidate for language, grammar,
+  naturalness, narrator POV, style, scene compliance, and continuity.
+- Do not truncate, relax bounds, edit outputs into acceptance, or substitute a
+  fixture/mock control for raw-generation evidence. Historical English raw
+  outputs of 99 and 90 words failed 20-80 bounds; the 50-word passing fixture was
+  only a control. That raw English acceptance gap remains unpassed.
+- Passing this small synthetic benchmark would still not certify production
+  readiness, sustained provider performance, or real upstream compatibility.
