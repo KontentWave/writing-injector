@@ -6,8 +6,8 @@
 
 ## 1\. Current State ("As-Built" Present)
 
-- **Version:** `0.1.0` (Phase 1 implemented and offline-validated; human-run synthetic API connectivity observed, but raw English generation acceptance remains unpassed).
-- **Implemented Modules:** Bootstrapper, frozen models, configuration/storage checks, language-aware parser/prompt builder/shared QA, OpenRouter client, renderer, CLI, and synthetic unit/BDD tests. Phase 1 supports explicit `--language sk|en` with Slovak remaining the default; no Phase 2 orchestration or track integration is implemented. See [README](../README.md) for executable commands and supported formats.  
+- **Version:** `0.1.0` (Phase 1 and report-only Phase 2A implemented and offline-validated; human-run Phase 1 synthetic API connectivity observed, but raw English generation acceptance remains unpassed).
+- **Implemented Modules:** Bootstrapper, frozen models, configuration/storage checks, static model-profile registry, language-aware parser/prompt builder/shared QA, shared single/matrix OpenRouter execution, renderer/publication helpers, CLI, and synthetic unit/BDD tests. Phase 1 supports explicit `--language sk|en` with Slovak remaining the default. Phase 2A adds opt-in report-only `--models`; no track integration, path-based track detection, tail checks, translation workflows, or Phase 3 UI is implemented. See [README](../README.md) for executable commands and supported formats.
 - **Upstream Content Interfaces (Read-Only):**  
   - Story frames: `../zafo-shorts/blog/posts/post_XXX.md` (e.g., `post_002.md`)  
   - Style & prompt anchors: `../zafo-shorts/blog/docs/STYLE_SHEET.md` (§1 Pinned Sample, §6 Slot-Injector Prompt)  
@@ -62,12 +62,13 @@ zafo-injector/
 │       ├── __main__.py                # python -m zafo_injector entrypoint
 │       ├── markdown.py                # Shared numbered-section and rule-table extraction
 │       ├── models.py                  # Frozen dataclasses: SlotSpec, FrameDocument, LintIssue, LintReport, CandidateResult
+│       ├── model_profiles.py          # Static validated matrix registry, overrides, and global request budget
 │       ├── config.py                  # VaultConfig loader (.env + air-gap path containment check)
 │       ├── parser.py                  # Extracts POV metadata, slot instructions, word-target bounds, and context window
 │       ├── prompt_builder.py          # Combines STYLE_SHEET (§1 + §6) + TIER4_ADDON.txt + sliced frame context
 │       ├── slovak_lint.py             # Shared structural QA; Slovak-only lexicon and morphological POV checks
-│       ├── openrouter_client.py       # OpenRouter API client (magnum-v4-72b tuning, quantization pinning, N candidates)
-│       ├── renderer.py                # Writes *.candidates.md report and *.merged.md strictly into ~/zafo-local/output/
+│       ├── openrouter_client.py       # Shared single/matrix requests, global concurrency, bounded retries, redacted failures
+│       ├── renderer.py                # Legacy drafts or report-only *.arena.md/*.arena.json, shared safe publication
 │       └── cli.py                     # CLI (`python -m zafo_injector` / `zafo-inject`)
 └── tests/
     ├── fixtures/                      # Separate Tier-1 non-explicit Slovak/English fixtures & mock API payloads
@@ -102,6 +103,12 @@ zafo-injector/
 - **`LintIssue` & `LintReport`**  
   - `LintIssue(rule_id: str, severity: Literal["error", "warn"], match: str, suggestion: str, line: int)`  
   - `LintReport(word_count: int, paragraph_count: int, issues: tuple[LintIssue, ...], score: int, passed: bool)`
+- **Phase 2A frozen contracts**
+  - `ModelProfile(params: ModelParams, supported_parameters: tuple[str, ...])` filters effective sampling and records unsupported omissions; matrix provider routing requires parameter support.
+  - `CandidateResponse(model_id, index, attempts, text, failure)` retains the full model ID and 1-based request identity, with either text or an explicit `RequestFailure`, never both. Text is excluded from its representation.
+  - `RequestFailure(code, http_status)` supplies only fixed redacted messages, never remote response bodies or transport exception text.
+  - `ArenaCandidate(response, report)` has QA only for successful requests. `ArenaRun` keeps immutable profile/candidate tuples, validates complete model/index coverage and budgets, and derives API/strict status without choosing a winner.
+  - Existing `ModelParams` defaults, `CandidateResult(index, text, report)`, and `generate_candidates(messages, params, n)` call patterns remain unchanged. Both execution modes reuse request construction, transport settings, cleanup, retries, shared QA/ranking, and the same safe two-file publisher.
 
 ---
 
@@ -214,19 +221,28 @@ Deliver a tested, storage-isolated CLI pipeline that parses hybrid story frames,
 
 &nbsp;
 
-## 5\. Phase 2 (Planned): Multi-Model A/B Arena & `Serial-XP` / `Dark-Romance` Track Support
+## 5\. Phase 2: Implemented Comparison Arena (2A) & Deferred Track Support (2B)
 
 ### Action
 
-Proposed sequencing: first build a narrowly scoped offline comparison arena (Phase 2A), then consider track integration separately (Phase 2B). This is a recorded recommendation, not completed work or authorization to start implementation. No Phase 2 orchestration or track integration is implemented.
+Phase 2A's grouped design gate was approved on 2026-11-07, followed by implementation and synthetic offline validation. Its scope is a report-only comparison arena, not automatic selection/merging or production model acceptance. Phase 2B requires separate design and approval; no tracks, path inference, `CLEAN_TAIL_CHECK`, translation workflows, or UI were added.
 
-### Phase 2A (Proposed): Offline Multi-Model Comparison Arena
+### Phase 2A (Implemented): Offline-Validated Multi-Model Comparison Arena
 
-1. Add opt-in `--models m1,m2,...` with a small validated `ModelProfile` registry. Preserve existing single-model defaults, `--model`, explicit `--language sk|en`, payload parameters, concurrency/retry policy, and execution modes when matrix mode is not selected.
-2. Reuse the language-aware parser, prompt assembly, QA, and deterministic ranking instead of duplicating pipelines. Compare identical synthetic frames, selected language, style, and bounds; record any model-specific sampling differences so comparisons do not imply a controlled model-only experiment.
-3. Make matrix mode report-only: per-model candidate review and scorecards, without automatically selecting or merging a winner. Report structural pass rates, word counts, warnings, and explicit failures; a high structural score is not a language-quality score.
-4. Use only benign Tier-1 fixtures, temporary synthetic vaults outside D:/workspace/cloud locations, and mocked HTTP during development. Preserve source immutability, output containment, no-overwrite/rollback behavior, redaction, and explicit-only candidate printing.
-5. Keep one global request/concurrency budget across all models, not independent nested worker pools. Human-only synthetic live benchmarking is a later, separately budgeted step; mocked results cannot prove real model compliance.
+1. Opt-in `--models m1,m2,...` selects 2-3 exact registered full IDs. Whitespace is trimmed; empty/duplicate/unknown/retired IDs are rejected without substitution. `--model` and `--models` are mutually exclusive, including the explicit legacy default. Existing single-model defaults, payloads, execution modes, public call patterns, retries, and output policy are retained.
+2. The parser, style/prompt assembly, selected language, sliced frame context, bounds, shared QA, and per-model deterministic score/index ranking are reused. Messages are assembled once for the whole comparison. Explicit `--temp` overrides all profiles; explicit `--min-p` requires support in every selected model before file/vault access. Effective settings and omissions are recorded.
+3. Matrix mode writes only `<stem>.arena.md` (per-model scorecards, candidate prose and local lint tables) and `<stem>.arena.json` (version-1 metadata-only schema). Full model/candidate identities, scores, word/paragraph counts, hard passes, warnings, attempts and explicit failures are preserved. No winner or merged draft is generated; scores are structure/Slovak heuristic QA, not grammar, language-quality, scene-compliance or safety certification.
+4. Every planned candidate remains represented. Any API failure publishes explicitly `api_failed` reports and exits 4. With no API failures, strict mode publishes `strict_lint_failed` reports and exits 5 if any model has zero hard-passing candidates. Otherwise exit 0 means completed comparison, not universal acceptance. Local/publication errors exit 2 and storage violations exit 3, rolling back partial publications. Phase 1 still writes no drafts for API or strict all-failed batches.
+5. A common per-model count defaults to 3, with at most 9 initial requests and 27 HTTP attempts per matrix run. One shared executor caps global concurrency at 3, preserves 45-second timeouts, and retries only 429/5xx at most twice with existing backoff. Actual attempts are reported; there is no new single-model candidate cap.
+6. Both CLI entrypoints support both languages. Matrix dry-run validates roster/settings/budget without credential/addon reads, requests or writes; matrix lint-only is rejected. English never loads a default Slovak lexicon and still rejects explicit `--lexicon`. Candidate prose prints only with explicit `--print-output`, all successful candidates with identities, after both reports publish.
+7. Development uses only benign Tier-1 fixtures, fresh validated C: pytest/cache storage, synthetic vaults, and mocked HTTP with existing real-HTTP blockers. Source hashes/BOM/CRLF and immutable contracts are preserved. Both report files reuse the Phase 1 containment/no-overwrite/staging/rollback/cleanup mechanism, including failed reports. No live generation, private-vault access, dependency installation, commit, push, or remote Git operation is part of this implementation task.
+
+### Phase 2A Offline Validation Record (2026-11-07)
+
+- **Verified starting state:** clean local `main` at `d45e3ead7ebd52d996e0f6d500795c89d2a5d7dc`, matching the existing local `origin/main` tracking ref. No fetch or other remote Git operation was performed. Fresh full baseline: 290 tests passed in 65.90 seconds, Ruff lint/format passed (26 Python files), and strict mypy passed (11 source files).
+- **Completed fresh manual gate:** **519 tests passed in 111.47 seconds**; `ruff check --no-cache src tests` passed; `ruff format --check --no-cache src tests` passed (30 Python files); strict `mypy --cache-dir <fresh-safe-C-cache> src` passed (12 source files). Pytest used `-q -p no:cacheprovider --basetemp <fresh-safe-C-pytest-path>` with `PYTHONDONTWRITEBYTECODE=1`. Test storage, temporary vaults, and caches were fresh validated local C: locations outside D:/workspace/cloud storage.
+- **Development evidence:** 185 focused core/single-model regression tests passed, followed by 171 post-fix arena/single-model tests in 29.70 seconds (including 77 arena tests). A confirmed argparse object-identity defect allowed programmatic callers reusing the exact default model string to bypass `--model`/`--models` mutual exclusion. Default resolution now occurs after parsing; both argument orders reject before file access, with unchanged Phase 1 payload defaults. Strict type findings were corrected without casts or caller breakage; a test setup mistakenly combining existing mutually exclusive offline modes was corrected. Pylance verified all 13 existing public client call sites and all three lint-diagnostic helper call sites remained compatible.
+- **Scope and limitations:** These are local manual synthetic/mocked checks, not hosted CI or live acceptance. Both entrypoints/languages, shared concurrency, payloads, actual attempts/retries, exact bounds, explicit API/strict failures, deterministic schema/ranking, source immutability, output containment/no-overwrite/rollback/cleanup, and legacy regressions were exercised. No live generation or private-vault access occurred. The human arena benchmark remains unexecuted; historical raw English bounds and language-quality acceptance gaps remain unchanged.
 
 ### Phase 2B (Deferred): Track Integration & Continuity-Tail Checks
 
@@ -235,12 +251,21 @@ Proposed sequencing: first build a narrowly scoped offline comparison arena (Pha
 3. Tail length, structure, and configured heuristics may be checked deterministically. Passing such a rule must not be represented as certification that prose is safe Tier 1-2 content; human safety and scene-compliance review remains necessary.
 4. Keep selected-language QA consistent. Track rules must not introduce Slovak lexicon or morphological checks into English mode.
 
-### Decisions Required Before Phase 2A Implementation
+### Approved Phase 2A Decisions and Public Metadata Snapshot (2026-11-07)
 
-- Verify full OpenRouter model IDs, current availability, supported parameters, and pricing from public metadata only. The original roster (`magnum-v4-72b`, `deepseek-chat-v3-0324`, `l3.3-euryale-70b`) contains unverified planning examples, not a confirmed current model list.
-- Specify model-list validation, `--model`/`--models` precedence or incompatibility, profile overrides, and matrix interactions with offline CLI modes.
-- Specify whether a model API failure aborts the whole matrix or produces an explicitly failed partial report, including exit status and output policy. Do not silently drop failures, substitute models, or present incomplete runs as success.
-- Define the total candidate/request budget and human live-benchmark acceptance criteria before implementation or paid testing. Record sampling settings and separate structural compliance from human language/scene review.
+- Public [catalog](https://openrouter.ai/api/v1/models) and individual model `/endpoints` metadata were read without credentials, prompts, or inference. These are planning snapshots, never offline runtime/test dependencies or live availability/billing guarantees.
+
+| Approved full ID | Supported matrix sampling | Catalog input/output USD per million tokens |
+|---|---|---|
+| `anthracite-org/magnum-v4-72b` | temperature, top_p, min_p, repetition_penalty | 2.50 / 5.00 |
+| `deepseek/deepseek-chat-v3-0324` | temperature, top_p | 0.29 / 1.14 |
+| `sao10k/l3.1-euryale-70b` | temperature, top_p, min_p, repetition_penalty | 0.85 / 0.85 |
+
+- Each approved ID had an fp8 endpoint with status 0. The status-0 DeepSeek endpoint advertised 0.25 / 1.00 rather than the catalog aggregate. The old `sao10k/l3.3-euryale-70b` ID was absent from the catalog with zero endpoints; replacement by the listed **3.1** ID was explicitly approved, not silently substituted.
+- Defaults: temperature 0.68/top_p 0.90; min_p 0.06/repetition_penalty 1.05 only where supported, omitted for DeepSeek. Matrix provider settings retain bf16/fp16/fp8 and `allow_fallbacks=true`, adding `require_parameters=true` to avoid silently ignored parameters. Explicit overrides take precedence as specified above.
+- JSON root fields: schema_version, mode, status/exit/strict, language/POV/bounds, QA limitations/formula, execution budgets/attempts, and models. Each model records effective settings/support omissions/provider, status, scorecard and candidates. Pass rates use all requested candidates, including API failures, as denominator. Each candidate has stable ID/index, attempts, status, nullable score/word/paragraph/pass/error/warning metrics, redacted rule/severity/line issues, and a safe failure code/status/message. API failures have null QA metrics/issues, never zero-score success-shaped placeholders. Prose/matched text/suggestions appear only in the vault-local Markdown review. Full schema and failure table are in [README](../README.md#arena-reports-schema-and-failure-policy).
+- Future human-only benchmark is **defined, not executed**: three models x three candidates x two languages = 18 initial requests / at most 54 attempts, using identical per-language synthetic frame/style/addon/messages and unchanged inclusive bounds. Separate approval of prompt transmission and a dollar budget is required before paid testing; request caps do not enforce a dollar cap. Record actual billing/latency/attempts/failures and fresh source hashes in the synthetic vault output directory.
+- Small-benchmark acceptance: no API failures; every raw candidate within word/2-4-paragraph bounds and passing all hard QA rules; warnings reviewed, and independent human language/grammar/naturalness/POV/style/scene/continuity review. No truncation, relaxed bounds, edited-output substitution or fixture/mock acceptance. Historical English 99/90-word failures remain unpassed; the 50-word fixture is only a control. Even passing this benchmark is not production readiness or upstream/provider certification.
 
 ### Accessibility
 
@@ -248,13 +273,13 @@ Proposed sequencing: first build a narrowly scoped offline comparison arena (Pha
 
 ### Test Plan
 
-- Phase 2A: unit/BDD tests for model-list/profile validation, both CLI entrypoints and languages, mocked matrix execution, deterministic reports, explicit failures, global concurrency/retries, redaction, unchanged sources, and output transactions. Retain Phase 1 single-model regression coverage.
+- Phase 2A: synthetic unit/BDD tests cover profile validation/overrides and exact request limits, both entrypoints/languages with approved offline combinations/rejections, mocked payloads/identical messages/stable mapping, deterministic per-model reports/version-1 schema, one global executor and retries/actual attempts, explicit API/strict/non-strict failures, redaction/explicit printing, raw 19/20/80/81/90/99-word threshold controls, unchanged source hashes/BOM/CRLF, immutable contracts, no automatic winner/merge, containment, no overwrites, competing publication, rollback and cleanup. Existing Phase 1 regressions remain covered.
 - Phase 2B, only after separate approval: synthetic track-selection/path-inference tests and precisely scoped continuity-tail tests. No test result certifies semantic Tier 1-2 safety.
 
 ### Perf / Security Notes
 
-- Preserve the current three-request concurrency limit as the proposed global default. Raising it to four is not itself a guarantee of per-key rate-limit compliance; any change needs explicit approval and targeted validation.
-- Three models with three candidates each mean nine initial requests before retries. Define a total budget; preserve bounded retry policy and do not hide extra requests or potential costs.
+- The approved and implemented shared three-request concurrency cap is not a guarantee of per-key rate-limit compliance. Raising it requires separate approval and validation.
+- Three models with three candidates each mean nine initial requests and at most 27 attempts per invocation. 45-second per-request timeouts and bounded retries do not guarantee total run latency or a dollar budget. Publication conflicts are still checked after generation, so repeated human live requests can incur charges before reports are blocked.
 - Assistants never execute live generation or inspect private vaults, credentials, addons, or real upstream prose. Human live comparisons transmit assembled prompts to OpenRouter and may incur charges; storage isolation is not a network air gap.
 
 <!-- PHASE_2_END -->

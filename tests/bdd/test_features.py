@@ -1,12 +1,15 @@
+import json
 from pathlib import Path
 
 import httpx
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
+from zafo_injector import cli
 from zafo_injector.cli import main
 from zafo_injector.config import AirGapViolationError, validate_storage_path
 from zafo_injector.models import FrameDocument
+from zafo_injector.openrouter_client import OpenRouterClient
 from zafo_injector.slovak_lint import LexiconRules, lint_candidate
 
 scenarios(str(Path(__file__).resolve().parents[2] / "specs" / "features"))
@@ -79,3 +82,65 @@ def drafts(vault: Path, fixtures: Path, original: bytes) -> None:
     assert (vault / "output" / "frame.merged.md").is_file()
     assert (fixtures / "frame.md").read_bytes() == original
     assert not (fixtures / "frame.merged.md").exists()
+
+
+ARENA_MODELS = (
+    "anthracite-org/magnum-v4-72b",
+    "deepseek/deepseek-chat-v3-0324",
+    "sao10k/l3.1-euryale-70b",
+)
+
+
+@when("model comparison is executed")
+def compare_models(cli_args: list[str]) -> None:
+    assert main(cli_args + ["--models", ",".join(ARENA_MODELS), "--strict"]) == 0
+
+
+@then("only arena review and scorecards exist in the synthetic vault output")
+def arena_reports(vault: Path, fixtures: Path, original: bytes) -> None:
+    assert sorted(path.name for path in (vault / "output").iterdir()) == [
+        "frame.arena.json",
+        "frame.arena.md",
+    ]
+    assert (fixtures / "frame.md").read_bytes() == original
+
+
+@then("every model has its planned stable candidate identities")
+def planned_identities(vault: Path) -> None:
+    metadata = json.loads((vault / "output" / "frame.arena.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "completed" and metadata["execution"]["http_attempts"] == 9
+    for model, model_id in zip(metadata["models"], ARENA_MODELS, strict=True):
+        assert model["model_id"] == model_id
+        assert model["scorecard"]["hard_pass_count"] == 3
+        assert [candidate["candidate_id"] for candidate in model["candidates"]] == [
+            f"{model_id}::candidate-{index}" for index in range(1, 4)
+        ]
+
+
+@when("comparison with a failed model is executed")
+def compare_failed_model(
+    cli_args: list[str], candidate: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        model_id = json.loads(request.content)["model"]
+        if model_id == ARENA_MODELS[1]:
+            return httpx.Response(401, text="SYNTHETIC_REMOTE_SECRET")
+        return httpx.Response(200, json={"choices": [{"message": {"content": candidate}}]})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as transport:
+        monkeypatch.setattr(
+            cli, "OpenRouterClient", lambda key: OpenRouterClient(key, client=transport)
+        )
+        assert main(cli_args + ["--models", ",".join(ARENA_MODELS), "--strict"]) == 4
+
+
+@then("the scorecards explicitly record the failed model")
+def failed_scorecard(vault: Path) -> None:
+    raw = (vault / "output" / "frame.arena.json").read_text(encoding="utf-8")
+    metadata = json.loads(raw)
+    assert metadata["status"] == "api_failed" and metadata["exit_code"] == 4
+    failed = metadata["models"][1]
+    assert failed["model_id"] == ARENA_MODELS[1]
+    assert failed["scorecard"]["api_failed"] == 3
+    assert all(candidate["score"] is None for candidate in failed["candidates"])
+    assert "SYNTHETIC_REMOTE_SECRET" not in raw

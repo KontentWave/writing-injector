@@ -21,6 +21,20 @@ import pytest
         ("language", 2),
         ("header", 2),
         ("lexicon", 2),
+        ("arena-dry", 0),
+        ("arena-overrides", 0),
+        ("arena-lint", 2),
+        ("arena-model", 2),
+        ("arena-budget", 2),
+        ("arena-min-p", 2),
+        ("arena-invalid", 2),
+        ("arena-duplicate", 2),
+        ("arena-empty", 2),
+        ("arena-one", 2),
+        ("arena-forbidden", 3),
+        ("arena-lexicon", 2),
+        ("arena-print", 0),
+        ("arena-list-trim", 0),
     ],
 )
 def test_offline_cli_entrypoints(
@@ -79,6 +93,40 @@ def test_offline_cli_entrypoints(
             args += ["--language", "de"]
         elif mode == "lexicon":
             args += ["--lexicon", str(docs / "missing-synthetic-lexicon.md")]
+    if mode.startswith("arena-"):
+        magnum = "anthracite-org/magnum-v4-72b"
+        deepseek = "deepseek/deepseek-chat-v3-0324"
+        euryale = "sao10k/l3.1-euryale-70b"
+        roster = f"{magnum},{deepseek},{euryale}"
+        if mode == "arena-overrides":
+            roster = f"{magnum},{euryale}"
+            args += ["--temp", "0.4", "--min-p", "0.2"]
+        elif mode == "arena-list-trim":
+            roster = f" {euryale} , {magnum} "
+        elif mode == "arena-model":
+            args += ["--model", magnum]
+        elif mode == "arena-budget":
+            args += ["--candidates", "4"]
+        elif mode == "arena-min-p":
+            args += ["--min-p", "0.06"]
+        elif mode == "arena-invalid":
+            roster = f"{magnum},sao10k/l3.3-euryale-70b"
+        elif mode == "arena-duplicate":
+            roster = f"{magnum},{magnum}"
+        elif mode == "arena-empty":
+            roster = f"{magnum},"
+        elif mode == "arena-one":
+            roster = magnum
+        elif mode == "arena-lint":
+            args.remove("--dry-run")
+            args += ["--lint-only", str(candidate)]
+        elif mode == "arena-forbidden":
+            args[2] = r"D:\must-not-be-created"
+        elif mode == "arena-lexicon":
+            args += ["--lexicon", str(docs / "missing-synthetic-lexicon.md")]
+        elif mode == "arena-print":
+            args += ["--print-output"]
+        args += ["--models", roster]
     command = (
         [sys.executable, "-m", "zafo_injector"]
         if entrypoint == "module"
@@ -104,8 +152,18 @@ def test_offline_cli_entrypoints(
         assert f"language={language or 'sk'}" in output
     else:
         assert "[FAIL]" in output or "error:" in output
-    if mode == "lexicon" and english:
+    if mode in ("lexicon", "arena-lexicon") and english:
         assert "--lexicon is Slovak-only" in output
+    if mode.startswith("arena-") and exit_code == 0:
+        assert "Report-only arena:" in output
+        assert "global concurrency cap=3" in output
+        if mode == "arena-overrides":
+            assert "temperature=0.4; min_p=0.2" in output
+        elif mode == "arena-list-trim":
+            assert output.index("Model " + euryale) < output.index("Model " + magnum)
+        else:
+            assert "initial requests=9/9" in output
+            assert "HTTP attempt budget=27" in output
     if english:
         assert not (docs / "SLOVAK_LEXICON.md").exists()
     assert source.read_bytes() == original
