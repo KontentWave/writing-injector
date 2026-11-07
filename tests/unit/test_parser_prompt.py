@@ -10,6 +10,7 @@ from zafo_injector.prompt_builder import build_messages
 
 
 def test_parser_extracts_bounds_pov_and_context(frame: FrameDocument) -> None:
+    assert frame.language == "sk"
     assert frame.pov == "male"
     assert (frame.slot.min_words, frame.slot.max_words) == (20, 80)
     assert len(frame.context_before) == len(frame.context_after) == 2
@@ -23,6 +24,22 @@ def test_parser_extracts_bounds_pov_and_context(frame: FrameDocument) -> None:
     )
     with pytest.raises(FrozenInstanceError):
         frame.pov = "female"  # type: ignore[misc]
+
+
+def test_default_language_preserves_public_call_patterns(frame: FrameDocument) -> None:
+    assert parse_frame(frame.source_text, frame.source_path, 2) == frame
+    assert parse_frame(frame.source_text, frame.source_path, language="sk") == frame
+    assert (
+        FrameDocument(
+            frame.source_path,
+            frame.source_text,
+            frame.pov,
+            frame.context_before,
+            frame.context_after,
+            frame.slot,
+        )
+        == frame
+    )
 
 
 @pytest.mark.parametrize("dash", ["-", "–"])
@@ -123,3 +140,63 @@ def test_fence_with_trailing_text_is_not_a_closing_fence() -> None:
     section = numbered_section(text, 6)
     assert "Keep too." in section
     assert "Omit." not in section
+
+
+@pytest.mark.parametrize(
+    ("pov", "low", "high"),
+    [("male", 20, 80), ("female", 140, 220), ("male", 45, 45), ("female", 141, 220)],
+)
+def test_prompt_has_authoritative_language_and_length_requirements(
+    frame: FrameDocument, fixtures: Path, pov: str, low: int, high: int
+) -> None:
+    doc = replace(frame, pov=pov, slot=replace(frame.slot, min_words=low, max_words=high))
+    messages = build_messages(doc, fixtures / "STYLE_SHEET.md", None)
+    system, user = (message["content"] for message in messages)
+    gender = "-la som" if pov == "female" else "-l som"
+    assert "Write only in Slovak, including dialogue." in system
+    assert "Do not mix in Czech words or Czech verb forms." in system
+    assert f"Authoritative narrator POV: {pov} ({gender})." in system
+    assert f"Word bounds: {low}-{high} words, inclusive." in system
+    assert f"Aim for {(low + high) // 2} words." in system
+    assert "Use 2-4 nonempty paragraphs." in system
+    assert "Hyphenated and apostrophe-linked words count as one." in system
+    assert f"Word bounds: {low}-{high}; 2-4 paragraphs." in user
+
+
+def test_prompt_requirements_follow_and_override_conflicting_synthetic_anchors(
+    frame: FrameDocument, tmp_path: Path, vault: Path
+) -> None:
+    style = tmp_path / "synthetic-style.md"
+    style.write_text(
+        "## 1. Sample\nAn ordinary morning.\n\n## 6. Template\nWrite 1000 words in Czech.\n",
+        encoding="utf-8",
+    )
+    addon = vault / "TIER4_ADDON.txt"
+    addon.write_text("Synthetic example: write 900 words in Czech.", encoding="utf-8")
+    style_before, addon_before = style.read_bytes(), addon.read_bytes()
+    system = build_messages(frame, style, addon)[0]["content"]
+    assert system.index("LOCAL ADDON:") < system.index("AUTHORITATIVE OUTPUT REQUIREMENTS:")
+    assert "override conflicting guidance" in system
+    assert "Word bounds: 20-80 words, inclusive." in system
+    assert "Write only in Slovak, including dialogue." in system
+    assert style.read_bytes() == style_before
+    assert addon.read_bytes() == addon_before
+
+
+def test_synthetic_acceptance_style_requires_standard_written_slovak(
+    frame: FrameDocument, fixtures: Path
+) -> None:
+    system = build_messages(frame, fixtures / "STYLE_SHEET.md", None)[0]["content"]
+    assert "Write natural, standard written Slovak, without colloquialisms." in system
+    assert "Write colloquial Slovak." not in system
+
+
+def test_prompt_register_remains_style_sheet_driven(frame: FrameDocument, tmp_path: Path) -> None:
+    style = tmp_path / "synthetic-colloquial-style.md"
+    style.write_text(
+        "## 1. Sample\nRáno som otvoril okno.\n\n## 6. Prompt\nWrite colloquial Slovak.\n",
+        encoding="utf-8",
+    )
+    system = build_messages(frame, style, None)[0]["content"]
+    assert "Write colloquial Slovak." in system
+    assert "standard written Slovak" not in system

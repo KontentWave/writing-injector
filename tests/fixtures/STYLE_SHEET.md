@@ -10,11 +10,12 @@ This section must not enter the prompt.
 
 ## 4. Word choice
 
-Use ordinary, conversational Slovak.
+Use natural, standard written Slovak without colloquialisms.
 
 ## 6. Hybrid Slot-Injector Prompt
 
-Write colloquial Slovak. Male narrator uses -l som.
+Write natural, standard written Slovak, without colloquialisms.
+Male narrator uses -l som.
 Preserve continuity and do not repeat surrounding sentences.
 
 ### Context

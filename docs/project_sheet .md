@@ -1,13 +1,13 @@
 # `project_sheet.md` — `zafo-injector` (Living Technical Specification)
 
-> **Project:** `zafo-injector` — Air-Gapped OpenRouter Slot Injector & Slovak Prose Linter **Framework:** Iterative Scrum-XP (`PLAN -> DRAFT -> SPECIFY (.feature) -> EXECUTE (BDD/TDD) -> AUDIT`) **Target Runtime:** Windows 11 \+ PowerShell 7 \+ Python 3.12+ (zero heavy ML dependencies) **Primary Model Target:** `anthracite-org/magnum-v4-72b` via OpenRouter Chat Completions API
+> **Project:** `zafo-injector` — Isolated-Vault OpenRouter Slot Injector & Slovak/English QA **Framework:** Iterative Scrum-XP (`PLAN -> DRAFT -> SPECIFY (.feature) -> EXECUTE (BDD/TDD) -> AUDIT`) **Target Runtime:** Windows 11 \+ PowerShell 7 \+ Python 3.12+ (zero heavy ML dependencies) **Primary Model Target:** `anthracite-org/magnum-v4-72b` via OpenRouter Chat Completions API
 
 ---
 
 ## 1\. Current State ("As-Built" Present)
 
 - **Version:** `0.1.0` (Phase 1 implemented against synthetic fixtures; live integration unverified).  
-- **Implemented Modules:** Bootstrapper, frozen models, configuration/storage checks, parser, prompt builder, Slovak linter, OpenRouter client, renderer, CLI, and synthetic unit/BDD tests. See [README](../README.md) for executable commands and supported formats.  
+- **Implemented Modules:** Bootstrapper, frozen models, configuration/storage checks, language-aware parser/prompt builder/shared QA, OpenRouter client, renderer, CLI, and synthetic unit/BDD tests. Phase 1 supports explicit `--language sk|en` with Slovak remaining the default; no Phase 2 orchestration or track integration is implemented. See [README](../README.md) for executable commands and supported formats.  
 - **Upstream Content Interfaces (Read-Only):**  
   - Story frames: `../zafo-shorts/blog/posts/post_XXX.md` (e.g., `post_002.md`)  
   - Style & prompt anchors: `../zafo-shorts/blog/docs/STYLE_SHEET.md` (§1 Pinned Sample, §6 Slot-Injector Prompt)  
@@ -46,12 +46,12 @@ zafo-injector/
 │       ├── config.py                  # VaultConfig loader (.env + air-gap path containment check)
 │       ├── parser.py                  # Extracts POV metadata, slot instructions, word-target bounds, and context window
 │       ├── prompt_builder.py          # Combines STYLE_SHEET (§1 + §6) + TIER4_ADDON.txt + sliced frame context
-│       ├── slovak_lint.py             # Slovak QA engine: Czechisms, English calques, word/paragraph bounds, POV gender lock
+│       ├── slovak_lint.py             # Shared structural QA; Slovak-only lexicon and morphological POV checks
 │       ├── openrouter_client.py       # OpenRouter API client (magnum-v4-72b tuning, quantization pinning, N candidates)
 │       ├── renderer.py                # Writes *.candidates.md report and *.merged.md strictly into ~/zafo-local/output/
 │       └── cli.py                     # CLI (`python -m zafo_injector` / `zafo-inject`)
 └── tests/
-    ├── fixtures/                      # 100% Tier-1 non-explicit dummy Slovak fixtures & mock API payloads
+    ├── fixtures/                      # Separate Tier-1 non-explicit Slovak/English fixtures & mock API payloads
     ├── unit/                          # Inner-loop TDD unit tests
     └── bdd/                           # Outer-loop pytest-bdd step definitions
 ```
@@ -67,10 +67,12 @@ zafo-injector/
   - `slot_start_idx: int` / `slot_end_idx: int` — Exact character offsets in source frame for lossless splicing.  
 - **`FrameDocument`**  
   - `source_path: Path`  
-  - `pov: Literal["male", "female"]` — Parsed from header comment (`-l som` \-\> `"male"`, `-la som` \-\> `"female"`).  
-  - `context_before: list[str]` — Up to 2 paragraphs immediately preceding the slot.  
-  - `context_after: list[str]` — Up to 2 paragraphs immediately following the slot.  
+  - `source_text: str` — Original source including BOM and line endings, retained for lossless splicing.  
+  - `pov: Literal["male", "female"]` — Explicit `POV: Male` / `POV: Female` metadata; Slovak suffix conventions remain supported but are not required in English.  
+  - `context_before: tuple[str, ...]` — Up to 2 paragraphs immediately preceding the slot.  
+  - `context_after: tuple[str, ...]` — Up to 2 paragraphs immediately following the slot.  
   - `slot: SlotSpec`  
+  - `language: Literal["sk", "en"] = "sk"` — Explicit selection, appended to preserve existing constructor call patterns; frozen with the other fields.  
 - **`ModelParams`**  
   - `model: str = "anthracite-org/magnum-v4-72b"`  
   - `temperature: float = 0.68`  
@@ -89,21 +91,24 @@ zafo-injector/
 - "Air-gap" means storage isolation, not network isolation: live generation sends the assembled prompt and optional local addon to OpenRouter.
 - Context collections are immutable tuples. `FrameDocument.source_text` retains the source verbatim; `CandidateResult(index, text, report)` supplies deterministic tie-breaking.
 - Dry-run prints a redacted structure report, performs no writes, and never reads credentials or the addon. Lint-only does not access the vault.
-- `--strict`, `--print-output`, `--style-sheet`, and `--lexicon` are implemented. Style/lexicon defaults resolve relative to the frame's `posts` directory.
+- `--language sk|en`, `--strict`, `--print-output`, `--style-sheet`, and `--lexicon` are implemented. Style defaults resolve relative to the frame's `posts` directory; only Slovak loads the neighboring lexicon. Explicit `--lexicon` in English is rejected with exit 2 before file/vault access. No language auto-detection is performed.
 - Any API failure aborts the batch without drafts. Existing drafts are not overwritten. Strict all-failed batches produce exit 5 without drafts; non-strict failures are explicitly reported.
 - Entire-drive `D:\` rejection supplements workspace, known Google Drive names, configured `GOOGLE_DRIVE_DIR`, and ancestor marker checks. Custom cloud mount discovery is not exhaustive.
 - Real upstream formats and live provider performance remain to be verified by a human; no real vault access or live generation was used during implementation.
 - Offline validation includes subprocess checks for both entrypoints, redirected vault children, staged-output failures, and partial mocked API failures. Parser bounds consume the complete target field, duplicate POV fields fail, and a leading BOM is excluded from context without changing source offsets. Markdown section discovery ignores fenced examples; lint paragraph boundaries tolerate trailing whitespace and LF/CRLF.
+- Prompts end with selected-language-only, POV, inclusive word-bound, paragraph, and prose-only requirements, with an integer midpoint word-count target. Slovak grammatical guidance is retained; English receives first-person POV guidance without Slovak endings. These override conflicting anchors while the style sheet controls writing register. Generation prints redacted per-candidate rule IDs and line numbers, including before strict failure.
+- Both languages reuse word/paragraph bounds, sentence warnings, exact boundary echoes, scoring, and ranking. Only Slovak applies `CZECHISM`, `CALQUE`, `CLINICAL_OR_HARLEQUIN`, and morphological `POV_DRIFT`. English does not check grammar, spelling, output language, narrative POV, or scene compliance. Passing lint does not certify natural language quality; human review remains required.
+- Separate English frame/style/candidate fixtures use natural standard written English. Offline tests exercise both entrypoints, lexicon independence and explicit rejection, inclusive thresholds, immutable contracts, BOM/CRLF preservation, strict/non-strict redaction, and mocked HTTP generation with unchanged payload parameters and output safety. Existing Slovak coverage is retained.
 
 <!-- PHASE_1_START -->
 
 &nbsp;
 
-## 4\. Phase 1 (MVP): Air-Gapped Blog Slot Injector & Slovak QA Linter
+## 4\. Phase 1 (MVP): Isolated-Vault Blog Slot Injector & Slovak/English QA
 
 ### Action
 
-Deliver a tested, air-gapped CLI pipeline (`init_local_vault.ps1` \+ `zafo-inject`) that parses hybrid story frames like `post_002.md`, generates `N` slot candidates from `anthracite-org/magnum-v4-72b` via OpenRouter, scores them with an automated Slovak lexicon/grammar linter, and writes reviewable \+ merged drafts exclusively to `~/zafo-local/output/`.
+Deliver a tested, storage-isolated CLI pipeline that parses hybrid story frames, generates `N` slot candidates from `anthracite-org/magnum-v4-72b` via OpenRouter, scores shared structural QA plus Slovak-only lexicon/morphology checks, and writes reviewable \+ merged drafts exclusively to the validated external vault's `output/`. Use `--language sk|en`, defaulting to Slovak. The existing Slovak-lexicon bootstrapper is unchanged; English-only synthetic vaults can be prepared manually by a human without loading a Slovak lexicon.
 
 ### Task (Ordered Technical Steps)
 
@@ -116,16 +121,16 @@ Deliver a tested, air-gapped CLI pipeline (`init_local_vault.ps1` \+ `zafo-injec
    - Enforce **Hard Containment Check**: resolve canonical real paths (`Path.resolve()`) and raise `AirGapViolationError` if `vault_dir` or `output_dir` resides inside `workspace_root` (`Bookstore`) or any Google Drive mount containing `.gdoc` /workspace markers.  
    - Parse `.env` cleanly without mutating global OS environment variables; mask `api_key` in `__repr__`.  
 3. **Frame & Slot Parser (`src/zafo_injector/parser.py`):**  
-   - Implement `parse_frame(markdown_text: str, source_path: Path, window_paragraphs: int = 2) -> FrameDocument`.  
-   - Extract `POV:` from the top metadata comment (`Male (-l som)` \-\> `"male"`, `Female (-la som)` \-\> `"female"`).  
-   - Match single `<!-- [TIER ... INSERT SLOT: <min>–<max> slov] ... -->` block (support hyphen `-` and en-dash `–`); raise `SlotParseError` if zero or multiple slots exist.  
+   - Implement `parse_frame(markdown_text: str, source_path: Path, window_paragraphs: int = 2, *, language: Literal["sk", "en"] = "sk") -> FrameDocument`.  
+   - Extract explicit `POV: Male` or `POV: Female` from the top metadata comment, preserving the Slovak `(-l som)` / `(-la som)` conventions.  
+   - Match one `<!-- [TIER ... INSERT SLOT: <min>–<max> slov] ... -->` in Slovak or `<min>–<max> words` in English (hyphen/en-dash supported; omitted bounds remain 140–220). Consume the complete target field, reject malformed or wrong-language units and missing/duplicate slots, and preserve exact offsets.  
    - Slice up to `window_paragraphs` clean prose paragraphs before and after the slot (skipping HTML comments and `#` headings).  
 4. **Prompt Assembler (`src/zafo_injector/prompt_builder.py`):**  
    - Implement `build_messages(doc: FrameDocument, style_sheet_path: Path, tier4_addon_path: Path | None) -> list[dict[str, str]]`.  
-   - Extract §1 (Pinned Golden Voice Sample) and §6 (Hybrid Slot-Injector Prompt) from `STYLE_SHEET.md`, adapt POV rule if `"female"`, append local `TIER4_ADDON.txt` when non-empty, and construct `system` \+ `user` messages (`ODSEK PRED`, `POKYNY PRE SCÉNU`, `ODSEK PO`).  
-5. **Slovak Lexicon & Morphology Linter (`src/zafo_injector/slovak_lint.py`):**  
+   - Extract §1 and §6 from the supplied style sheet, adapt Slovak female POV anchors only in Slovak mode, append a non-empty local addon, and construct `system` \+ `user` messages. Context labels are Slovak in `sk` and English in `en`; the final authoritative contract selects language/POV/length/paragraphs without overriding style register.  
+5. **Shared QA with Slovak Lexicon & Morphology (`src/zafo_injector/slovak_lint.py`):**  
    - Implement `LexiconRules.from_markdown(lexicon_path: Path) -> LexiconRules` parsing banned Czechisms (§3) and English AI calques (§4) from `SLOVAK_LEXICON.md`, supplemented by built-in inflected regex patterns (case-insensitive Unicode word boundaries `\b...\b`).  
-   - Implement `lint_candidate(text: str, doc: FrameDocument, rules: LexiconRules) -> LintReport`:  
+   - Implement `lint_candidate(text: str, doc: FrameDocument, rules: LexiconRules | None = None) -> LintReport`. Slovak requires rules; English accepts only `None` and never reads a default lexicon. All following vocabulary/gender checks are Slovak-only:  
      - `WORD_COUNT`: verify `doc.slot.min_words <= words <= doc.slot.max_words`.  
      - `PARAGRAPH_BOUNDS`: verify `2 <= paragraphs <= 4` and flag paragraphs exceeding 4 sentences (`warn`).  
      - `CZECHISM` / `CALQUE`: flag exact banned token/phrase matches (`error`) with suggested Slovak replacements from `SLOVAK_LEXICON.md`.  
@@ -142,7 +147,7 @@ Deliver a tested, air-gapped CLI pipeline (`init_local_vault.ps1` \+ `zafo-injec
      - Writes `<stem>.candidates.md` (all `N` candidates sorted by `LintReport.score`, with inline lint table and word counts).  
      - Splices the top-scoring candidate into `doc` (replacing the `<!-- [TIER ...] -->` block) and writes `<stem>.merged.md` into `output_dir` while leaving the source `post_002.md` completely untouched.  
    - Implement CLI flags:  
-     - `zafo-inject <post_path> [--candidates 3] [--model anthracite-org/magnum-v4-72b] [--temp 0.68] [--min-p 0.06] [--vault-dir PATH] [--dry-run] [--lint-only FILE]`  
+     - `zafo-inject <post_path> [--language sk|en] [--candidates 3] [--model anthracite-org/magnum-v4-72b] [--temp 0.68] [--min-p 0.06] [--vault-dir PATH] [--dry-run] [--lint-only FILE]`  
      - `--dry-run` prints metadata/word-window/linter readiness and writes the redacted `Tier 1–2` prompt structure check without calling OpenRouter or printing `TIER4_ADDON.txt`.
 
 ### Accessibility (CLI Ergonomics & Terminal Output)
@@ -153,9 +158,10 @@ Deliver a tested, air-gapped CLI pipeline (`init_local_vault.ps1` \+ `zafo-injec
 
 ### Test Plan (Unit, BDD & Integration — Using 100% Tier-1 Synthetic Fixtures)
 
-> **Fixture Rule:** All repository fixtures in `tests/fixtures/` use benign `Tier 1` Slovak prose (e.g., making coffee / fixing a leaky sink) with synthetic slot comments so automated tests can run freely inside Antigravity and GitHub Actions CI.
+> **Fixture Rule:** Repository fixtures use benign, non-explicit `Tier 1` Slovak or English prose with synthetic slot comments. Temporary vaults and pytest storage must be fresh, outside the whole D: drive/workspace/cloud locations. Real HTTP transports are blocked; English generation is tested with mocked HTTP only.
 
 - **Unit Tests (`tests/unit/`):**  
+  - English selection/header/prompt/QA and mocked-generation coverage lives in `test_english.py`, with both languages covered by subprocess and lossless-rendering regression tests. The standard written English acceptance candidate has exactly 50 words and two paragraphs within the 20–80-word fixture slot.  
   - `test_config_rejects_vault_inside_workspace`: Verifies `AirGapViolationError` when `vault_dir` points inside `Bookstore` or a subdirectory.  
   - `test_config_redacts_api_key_in_repr_and_errors`: Ensures `OPENROUTER_API_KEY` never leaks into string representations or tracebacks.  
   - `test_parser_extracts_slot_bounds_and_male_pov`: Validates parsing `140–220 slov`, `-l som` POV, and exact 2-paragraph before/after slicing on a `post_002`\-shaped fixture.  
@@ -169,7 +175,7 @@ Deliver a tested, air-gapped CLI pipeline (`init_local_vault.ps1` \+ `zafo-injec
 - **BDD Scenarios (`specs/features/` via `pytest-bdd`):**  
   - `vault_airgap.feature` — Blocking accidental Google Drive / workspace output paths.  
   - `slot_parsing.feature` — Extracting hybrid frame context and word targets.  
-  - `slovak_linter.feature` — Ranking clean colloquial Slovak above Czech-bleed / romance-calque candidates.  
+  - `slovak_linter.feature` — Ranking clean Slovak above Czech-bleed / romance-calque candidates.  
   - `slot_injection.feature` — End-to-end mocked CLI run producing `*.candidates.md` and `*.merged.md`.
 
 ### Perf / Security / Air-Gap Notes
@@ -177,6 +183,7 @@ Deliver a tested, air-gapped CLI pipeline (`init_local_vault.ps1` \+ `zafo-injec
 - **Hard Air-Gap Enforcement:** `renderer.py` re-verifies output path containment right before `open(..., "w")` (defense in depth) and never echoes generated candidate text to `stdout` unless `--print-output` is explicitly passed by a human in an external terminal.  
 - **Secret Hygiene:** `OPENROUTER_API_KEY` is read exclusively from `~/zafo-local/.env` or process env, transmitted only over HTTPS (`https://openrouter.ai`), and stripped from exception logs.  
 - **Latency & Cost Target (Unverified):** Parallelize the `N=3` candidate completions (`concurrent.futures.ThreadPoolExecutor(max_workers=3)` with 45s per-request timeout). At most 2 retries per request can extend total runtime beyond 45 seconds. The original \~6–10 second / \~\$0.003 target is not a measured guarantee; live latency, provider availability, and billing require human verification.
+- **Human-only English Acceptance:** Use only synthetic English inputs and an explicit unsynchronized vault outside D:. Keep credentials private. Capture fresh source hashes immediately before generation, archive old drafts inside that vault's output directory, acknowledge prompt transmission and possible costs, compare hashes afterward, and review natural English, POV, scene compliance, style, continuity, and structural bounds. Storage isolation is not a network air gap; mocked tests and historical Slovak connectivity trials do not establish production readiness. See the [README checklist](../README.md#human-acceptance).
 
 <!-- PHASE_1_END -->
 

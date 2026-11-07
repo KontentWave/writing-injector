@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+Language = Literal["sk", "en"]
+
 
 @dataclass(frozen=True)
 class SlotSpec:
@@ -21,6 +23,11 @@ class FrameDocument:
     context_before: tuple[str, ...]
     context_after: tuple[str, ...]
     slot: SlotSpec
+    language: Language = "sk"
+
+    def __post_init__(self) -> None:
+        if self.language not in ("sk", "en"):
+            raise ValueError("Language must be sk or en.")
 
 
 @dataclass(frozen=True)
