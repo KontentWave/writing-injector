@@ -9,7 +9,7 @@ import pytest
 from zafo_injector import cli
 from zafo_injector import renderer as renderer_module
 from zafo_injector.config import AirGapViolationError
-from zafo_injector.models import CandidateResult, FrameDocument, LintIssue, LintReport
+from zafo_injector.models import CandidateResult, FrameDocument, Language, LintIssue, LintReport
 from zafo_injector.openrouter_client import OpenRouterError
 from zafo_injector.renderer import OutputError, render_outputs
 from zafo_injector.slovak_lint import LexiconRules, lint_candidate
@@ -18,17 +18,30 @@ WORKSPACE = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("bom", ["", "\ufeff"])
+@pytest.mark.parametrize("language", ["sk", "en"])
 def test_lossless_merge_preserves_source(
-    frame: FrameDocument, rules: LexiconRules, candidate: str, vault: Path, tmp_path: Path, bom: str
+    frame: FrameDocument,
+    rules: LexiconRules,
+    candidate: str,
+    english_frame: FrameDocument,
+    english_candidate: str,
+    vault: Path,
+    tmp_path: Path,
+    bom: str,
+    language: Language,
 ) -> None:
+    if language == "en":
+        frame, candidate = english_frame, english_candidate
     source = tmp_path / "source.md"
     original = (bom + frame.source_text.replace("\n", "\r\n")).encode("utf-8")
     source.write_bytes(original)
     from zafo_injector.parser import parse_frame
 
-    doc = parse_frame(original.decode("utf-8"), source)
+    doc = parse_frame(original.decode("utf-8"), source, language=language)
     before_stat = source.stat()
-    result = CandidateResult(1, candidate, lint_candidate(candidate, doc, rules))
+    result = CandidateResult(
+        1, candidate, lint_candidate(candidate, doc, rules if language == "sk" else None)
+    )
     report, merged = render_outputs(
         doc, [result], vault / "output", vault_dir=vault, workspace_root=WORKSPACE
     )

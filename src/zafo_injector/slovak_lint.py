@@ -29,7 +29,11 @@ def _phrase_pattern(phrase: str) -> re.Pattern[str]:
     return re.compile(r"(?<!\w)" + r"\s+".join(map(re.escape, phrase.split())) + r"(?!\w)", re.I)
 
 
-def lint_candidate(text: str, doc: FrameDocument, rules: LexiconRules) -> LintReport:
+def lint_candidate(text: str, doc: FrameDocument, rules: LexiconRules | None = None) -> LintReport:
+    if doc.language == "sk" and rules is None:
+        raise ValueError("Slovak QA requires lexicon rules.")
+    if doc.language == "en" and rules is not None:
+        raise ValueError("English QA does not accept Slovak lexicon rules.")
     issues: list[LintIssue] = []
     words = len(_WORDS.findall(text))
     paragraphs = list(re.finditer(r"\S.*?(?=\r?\n[^\S\r\n]*\r?\n|\s*\Z)", text, re.DOTALL))
@@ -58,23 +62,29 @@ def lint_candidate(text: str, doc: FrameDocument, rules: LexiconRules) -> LintRe
                 paragraph.start(),
                 warn=True,
             )
-    for rule_id, entries in (("CZECHISM", rules.czechisms), ("CALQUE", rules.calques)):
-        for phrase, replacement in entries:
+    if rules is not None:
+        for rule_id, entries in (("CZECHISM", rules.czechisms), ("CALQUE", rules.calques)):
+            for phrase, replacement in entries:
+                for match in _phrase_pattern(phrase).finditer(text):
+                    add(rule_id, match.group(), replacement, match.start())
+        for phrase in rules.clinical:
             for match in _phrase_pattern(phrase).finditer(text):
-                add(rule_id, match.group(), replacement, match.start())
-    for phrase in rules.clinical:
-        for match in _phrase_pattern(phrase).finditer(text):
+                add(
+                    "CLINICAL_OR_HARLEQUIN",
+                    match.group(),
+                    "Use natural colloquial wording.",
+                    match.start(),
+                )
+        # Spaces preserve offsets while removing quoted dialogue from gender checks.
+        narration = re.sub(r"„[^“]*“", lambda m: " " * len(m.group()), text, flags=re.DOTALL)
+        pattern = r"\b[^\W\d_]+la\s+som\b" if doc.pov == "male" else r"\b[^\W\d_]+l\s+som\b"
+        for match in re.finditer(pattern, narration, re.I):
             add(
-                "CLINICAL_OR_HARLEQUIN",
+                "POV_DRIFT",
                 match.group(),
-                "Use natural colloquial wording.",
+                f"Keep {doc.pov} first-person past tense.",
                 match.start(),
             )
-    # Spaces preserve offsets while removing quoted dialogue from gender checks.
-    narration = re.sub(r"„[^“]*“", lambda m: " " * len(m.group()), text, flags=re.DOTALL)
-    pattern = r"\b[^\W\d_]+la\s+som\b" if doc.pov == "male" else r"\b[^\W\d_]+l\s+som\b"
-    for match in re.finditer(pattern, narration, re.I):
-        add("POV_DRIFT", match.group(), f"Keep {doc.pov} first-person past tense.", match.start())
     boundaries: list[str] = []
     if doc.context_before:
         boundaries.append(_sentences(doc.context_before[-1])[-1])

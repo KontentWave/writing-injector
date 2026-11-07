@@ -10,6 +10,7 @@ from zafo_injector.prompt_builder import build_messages
 
 
 def test_parser_extracts_bounds_pov_and_context(frame: FrameDocument) -> None:
+    assert frame.language == "sk"
     assert frame.pov == "male"
     assert (frame.slot.min_words, frame.slot.max_words) == (20, 80)
     assert len(frame.context_before) == len(frame.context_after) == 2
@@ -23,6 +24,22 @@ def test_parser_extracts_bounds_pov_and_context(frame: FrameDocument) -> None:
     )
     with pytest.raises(FrozenInstanceError):
         frame.pov = "female"  # type: ignore[misc]
+
+
+def test_default_language_preserves_public_call_patterns(frame: FrameDocument) -> None:
+    assert parse_frame(frame.source_text, frame.source_path, 2) == frame
+    assert parse_frame(frame.source_text, frame.source_path, language="sk") == frame
+    assert (
+        FrameDocument(
+            frame.source_path,
+            frame.source_text,
+            frame.pov,
+            frame.context_before,
+            frame.context_after,
+            frame.slot,
+        )
+        == frame
+    )
 
 
 @pytest.mark.parametrize("dash", ["-", "–"])

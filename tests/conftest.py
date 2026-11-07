@@ -44,6 +44,17 @@ def candidate(fixtures: Path) -> str:
 
 
 @pytest.fixture
+def english_frame(fixtures: Path) -> FrameDocument:
+    path = fixtures / "frame_en.md"
+    return parse_frame(path.read_text(encoding="utf-8"), path, language="en")
+
+
+@pytest.fixture
+def english_candidate(fixtures: Path) -> str:
+    return (fixtures / "candidate_en.txt").read_text(encoding="utf-8").strip()
+
+
+@pytest.fixture
 def vault(tmp_path: Path) -> Path:
     path = tmp_path / "synthetic-vault"
     path.mkdir()
@@ -60,6 +71,19 @@ def cli_args(fixtures: Path, vault: Path) -> list[str]:
         str(fixtures / "STYLE_SHEET.md"),
         "--lexicon",
         str(fixtures / "SLOVAK_LEXICON.md"),
+        "--vault-dir",
+        str(vault),
+    ]
+
+
+@pytest.fixture
+def english_cli_args(fixtures: Path, vault: Path) -> list[str]:
+    return [
+        str(fixtures / "frame_en.md"),
+        "--language",
+        "en",
+        "--style-sheet",
+        str(fixtures / "STYLE_SHEET_EN.md"),
         "--vault-dir",
         str(vault),
     ]

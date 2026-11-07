@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from .models import FrameDocument, SlotSpec
+from .models import FrameDocument, Language, SlotSpec
 
 
 class SlotParseError(ValueError):
@@ -20,7 +20,15 @@ def _paragraphs(text: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in re.split(r"\n\s*\n", text) if part.strip())
 
 
-def parse_frame(markdown_text: str, source_path: Path, window_paragraphs: int = 2) -> FrameDocument:
+def parse_frame(
+    markdown_text: str,
+    source_path: Path,
+    window_paragraphs: int = 2,
+    *,
+    language: Language = "sk",
+) -> FrameDocument:
+    if language not in ("sk", "en"):
+        raise SlotParseError("Language must be sk or en.")
     if window_paragraphs < 0:
         raise SlotParseError("Context window must be nonnegative.")
     comments = list(_COMMENTS.finditer(markdown_text))
@@ -46,11 +54,14 @@ def parse_frame(markdown_text: str, source_path: Path, window_paragraphs: int = 
     if not separator:
         raise SlotParseError("Slot header must end with ].")
     target = re.split(r"INSERT SLOT", header, flags=re.I)[1].strip()
-    bounds = re.fullmatch(r":\s*(\d+)\s*[-–]\s*(\d+)\s+slov", target, re.I)
+    unit = "slov" if language == "sk" else "words"
+    bounds = re.fullmatch(rf":\s*(\d+)\s*[-–]\s*(\d+)\s+{unit}", target, re.I)
     if bounds:
         low, high = map(int, bounds.groups())
     elif target:
-        raise SlotParseError("Malformed slot word bounds.")
+        raise SlotParseError(
+            f"Malformed slot word bounds; expected : MIN-MAX {unit} for language {language}."
+        )
     else:
         low, high = 140, 220
     if not 0 < low <= high:
@@ -64,4 +75,5 @@ def parse_frame(markdown_text: str, source_path: Path, window_paragraphs: int = 
         context_before=before[-window_paragraphs:] if window_paragraphs else (),
         context_after=after[:window_paragraphs],
         slot=SlotSpec(match.group(), low, high, instructions.strip(), match.start(), match.end()),
+        language=language,
     )
