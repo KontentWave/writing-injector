@@ -415,7 +415,21 @@ written English, with a 20-80-word slot and a 50-word, two-paragraph candidate.
   Human Slovak connectivity trials and mocked English passes are not proof of
   production readiness.
 
-### Phase 2A human-only benchmark: defined, not executed
+### Phase 2A human-only benchmark: smoke observed, formal runs pending
+
+A human-executed English smoke on 2026-11-09 returned three successful responses
+without retries or API failures. Magnum (87 words) and Euryale L3.1 (86) exceeded
+the unchanged 20-80-word maximum; DeepSeek (75) passed structural QA. The run
+correctly exited 5 with `strict_lint_failed` reports. Billed smoke cost was
+USD 0.001980, with settlement human-confirmed.
+
+The human preferred Magnum's prose and prioritizes fiction quality over minor
+word-target deviations for model selection. Structural scores are not literary
+rankings; this preference does not rewrite the recorded strict result. See the
+[project sheet](<docs/project_sheet .md>) for the dated outcome, evidence limits,
+and distinction between tested Euryale L3.1 and the desired, untested L3.3 target.
+The formal English/Slovak benchmark below remains unexecuted; no further paid
+stage is released by this record.
 
 - Separately approve prompt transmission and a spending budget before any paid
   run. Request caps do **not** enforce a dollar cap; advertised prices, response
@@ -437,6 +451,7 @@ written English, with a 20-80-word slot and a 50-word, two-paragraph candidate.
 - Do not truncate, relax bounds, edit outputs into acceptance, or substitute a
   fixture/mock control for raw-generation evidence. Historical English raw
   outputs of 99 and 90 words failed 20-80 bounds; the 50-word passing fixture was
-  only a control. That raw English acceptance gap remains unpassed.
+  only a control. The later 75-word DeepSeek smoke is a raw structural pass,
+  not completion of the formal all-candidate benchmark or human quality review.
 - Passing this small synthetic benchmark would still not certify production
   readiness, sustained provider performance, or real upstream compatibility.
