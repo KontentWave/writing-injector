@@ -24,6 +24,8 @@ from .prompt_builder import build_messages
 from .renderer import QA_LIMITATIONS, OutputError, rank_candidates, render_arena, render_outputs
 from .slovak_lint import LexiconRules, lint_candidate
 
+_TRACKS = ("blog", "serial", "dark-romance")
+
 
 def _utf8(stream: TextIO) -> None:
     reconfigure = getattr(stream, "reconfigure", None)
@@ -36,6 +38,60 @@ def _positive(value: str) -> int:
     if number < 1:
         raise argparse.ArgumentTypeError("must be positive")
     return number
+
+
+def _default_track_resource(path: Path, docs_dir: Path) -> Path:
+    if not path.resolve(strict=True).is_relative_to(docs_dir):
+        raise ConfigurationError(
+            "Default track resources must remain inside their designated docs directory."
+        )
+    return path
+
+
+def _resource_paths(
+    post_path: Path,
+    *,
+    language: Language,
+    track: str | None,
+    tracks_root: Path | None,
+    style_sheet: Path | None,
+    lexicon: Path | None,
+    require_style: bool,
+) -> tuple[Path, Path | None]:
+    if track is None:
+        if tracks_root is not None:
+            raise ConfigurationError("--track and --tracks-root must be supplied together.")
+        docs = post_path.resolve().parent.parent / "docs"
+        return (
+            style_sheet or docs / "STYLE_SHEET.md",
+            (lexicon or docs / "SLOVAK_LEXICON.md") if language == "sk" else None,
+        )
+    if tracks_root is None:
+        raise ConfigurationError("--track and --tracks-root must be supplied together.")
+    if track not in _TRACKS:
+        raise ConfigurationError("Track must be blog, serial, or dark-romance.")
+    root = tracks_root.expanduser().resolve(strict=True)
+    if not root.is_dir():
+        raise ConfigurationError("Track root must be an existing directory.")
+    selected = root / track
+    if not selected.is_dir():
+        raise ConfigurationError("Selected track directory is missing or not a directory.")
+    if selected.resolve(strict=True) != selected:
+        raise ConfigurationError("Selected track directory must not be redirected by links.")
+    if not post_path.resolve(strict=True).is_relative_to(selected):
+        raise ConfigurationError("Frame must be inside the explicitly selected track directory.")
+    docs = selected / "docs"
+    style = style_sheet
+    if style is None:
+        style = docs / ("STYLE_SHEET_EN.md" if language == "en" else "STYLE_SHEET.md")
+        if require_style:
+            style = _default_track_resource(style, docs)
+    rules_path = None
+    if language == "sk":
+        rules_path = lexicon or _default_track_resource(
+            root / "docs" / "SLOVAK_LEXICON.md", root / "docs"
+        )
+    return style, rules_path
 
 
 def _print_lint_issues(
@@ -57,6 +113,16 @@ def _arguments() -> argparse.ArgumentParser:
     parser.add_argument("post_path", type=Path)
     parser.add_argument(
         "--language", choices=("sk", "en"), default="sk", help="Output language (default: sk)."
+    )
+    parser.add_argument(
+        "--track",
+        choices=_TRACKS,
+        help="Explicit track; requires --tracks-root. Never inferred from source paths or prose.",
+    )
+    parser.add_argument(
+        "--tracks-root",
+        type=Path,
+        help="Explicit root containing track directories; requires --track.",
     )
     parser.add_argument("--candidates", type=_positive, default=3)
     models = parser.add_mutually_exclusive_group()
@@ -101,15 +167,34 @@ def main(argv: list[str] | None = None) -> int:
         if args.models is not None:
             profiles = select_model_profiles(args.models, temperature=args.temp, min_p=args.min_p)
             validate_matrix_request(profiles, args.candidates)
+        style_path, lexicon_path = _resource_paths(
+            args.post_path,
+            language=language,
+            track=args.track,
+            tracks_root=args.tracks_root,
+            style_sheet=args.style_sheet,
+            lexicon=args.lexicon,
+            require_style=args.lint_only is None,
+        )
         doc = parse_frame(
             args.post_path.read_bytes().decode("utf-8"), args.post_path, language=language
         )
-        source_docs = args.post_path.resolve().parent.parent / "docs"
-        style_path = args.style_sheet or source_docs / "STYLE_SHEET.md"
         rules: LexiconRules | None = None
-        if doc.language == "sk":
-            lexicon_path = args.lexicon or source_docs / "SLOVAK_LEXICON.md"
+        if lexicon_path is not None:
             rules = LexiconRules.from_markdown(lexicon_path)
+        if args.track is not None:
+            lexicon_source = (
+                "none"
+                if doc.language == "en"
+                else "override"
+                if args.lexicon is not None
+                else "shared-default"
+            )
+            print(
+                f"[PASS] Track selection: track={args.track}; "
+                f"style={'override' if args.style_sheet is not None else 'track-default'}; "
+                f"lexicon={lexicon_source}"
+            )
         if args.lint_only is not None:
             report = lint_candidate(args.lint_only.read_text(encoding="utf-8-sig"), doc, rules)
             status = "PASS" if report.passed else "FAIL"

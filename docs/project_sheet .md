@@ -6,8 +6,8 @@
 
 ## 1\. Current State ("As-Built" Present)
 
-- **Version:** `0.1.0` (Phase 1 and report-only Phase 2A implemented and offline-validated; human-run Phase 1 connectivity and a Phase 2A English smoke are recorded, but formal benchmark acceptance remains unpassed).
-- **Implemented Modules:** Bootstrapper, frozen models, configuration/storage checks, static model-profile registry, language-aware parser/prompt builder/shared QA, shared single/matrix OpenRouter execution, renderer/publication helpers, CLI, and synthetic unit/BDD tests. Phase 1 supports explicit `--language sk|en` with Slovak remaining the default. Phase 2A adds opt-in report-only `--models`; no track integration, path-based track detection, tail checks, translation workflows, or Phase 3 UI is implemented. See [README](../README.md) for executable commands and supported formats.
+- **Version:** `0.1.0` (Phase 1 and report-only Phase 2A implemented and offline-validated; the first Phase 2B explicit-track increment is added. Human-run Phase 1 connectivity and a Phase 2A English smoke are recorded, but formal benchmark acceptance remains unpassed).
+- **Implemented Modules:** Bootstrapper, frozen models, configuration/storage checks, static model-profile registry, language-aware parser/prompt builder/shared QA, shared single/matrix OpenRouter execution, renderer/publication helpers, CLI resource resolution, and synthetic unit/BDD tests. Phase 1 supports explicit `--language sk|en` with Slovak remaining the default. Phase 2A adds opt-in report-only `--models`; the first Phase 2B increment adds paired explicit `--track`/`--tracks-root` selection. No automatic track detection, tail checks, translation workflows, or Phase 3 UI is implemented. See [README](../README.md) for executable commands and supported formats.
 - **Upstream Content Interfaces (Read-Only):**  
   - Story frames: `../zafo-shorts/blog/posts/post_XXX.md` (e.g., `post_002.md`)  
   - Style & prompt anchors: `../zafo-shorts/blog/docs/STYLE_SHEET.md` (§1 Pinned Sample, §6 Slot-Injector Prompt)  
@@ -221,11 +221,11 @@ Deliver a tested, storage-isolated CLI pipeline that parses hybrid story frames,
 
 &nbsp;
 
-## 5\. Phase 2: Implemented Comparison Arena (2A) & Deferred Track Support (2B)
+## 5\. Phase 2: Comparison Arena (2A) & First Explicit-Track Increment (2B)
 
 ### Action
 
-Phase 2A's grouped design gate was approved on 2026-11-07, followed by implementation and synthetic offline validation. Its scope is a report-only comparison arena, not automatic selection/merging or production model acceptance. Phase 2B requires separate design and approval; no tracks, path inference, `CLEAN_TAIL_CHECK`, translation workflows, or UI were added.
+Phase 2A's grouped design gate was approved on 2026-11-07, followed by implementation and synthetic offline validation. Its scope is a report-only comparison arena, not automatic selection/merging or production model acceptance. The first Phase 2B explicit-track contract and feature-branch creation were separately approved on 2026-11-10. This increment does not complete all Phase 2B work: automatic track detection is excluded, and `CLEAN_TAIL_CHECK`, all continuity-tail functionality, translation workflows, and UI remain deferred.
 
 ### Phase 2A (Implemented): Offline-Validated Multi-Model Comparison Arena
 
@@ -272,12 +272,29 @@ This project-status summary records human-provided redacted diagnostics, an expl
 - **Intended use and model-version distinction:** Human-stated interests are Magnum v4 72B for mature-fiction scenes, immersive prose, and character interactions, and Euryale L3.3 70B v2.3 for emotional interaction, character consistency, and roleplay. These are intended evaluation goals, not capabilities established by this benign smoke. The actual Euryale tested here was **L3.1 70B v2.2**, `sao10k/l3.1-euryale-70b`; the desired L3.3 target was not tested or approved as a registry replacement. Exact availability, provider support, pricing, and any roster change require a fresh explicit decision before a future human run.
 - **Acceptance and next boundary:** The human considers controlled live evaluation necessary for judging fiction quality; offline checks and word-count scores cannot replace that assessment. Nevertheless, this diagnostic smoke is not formal benchmark acceptance. Formal English and Slovak runs remain unexecuted. Any future quality-first acceptance policy must be agreed prospectively, separately from the unchanged strict QA implementation. This record releases no rerun or further paid stage, changes no code/profiles/fixtures/bounds, and does not authorize upstream/private prose access or assistant-executed inference.
 
-### Phase 2B (Deferred): Track Integration & Continuity-Tail Checks
+### Phase 2B (First Increment): Explicit Track Integration
 
-1. Resolve `blog`, `serial`, and `dark-romance` tracks and corresponding style sheets only after a separate design and approval. Define explicit selection, any optional path inference, override precedence, and rejection of ambiguous paths; develop against synthetic layouts and styles, not real upstream prose or private addons.
-2. Define which text a `CLEAN_TAIL_CHECK` examines before implementing the proposed closing 150-250-word post-scene continuity check. Clarify whether the target is an existing episode tail or assembled output, not an unrelated short insertion candidate.
-3. Tail length, structure, and configured heuristics may be checked deterministically. Passing such a rule must not be represented as certification that prose is safe Tier 1-2 content; human safety and scene-compliance review remains necessary.
-4. Keep selected-language QA consistent. Track rules must not introduce Slovak lexicon or morphological checks into English mode.
+1. `--track blog|serial|dark-romance` and `--tracks-root ROOT` must be supplied together. Both entrypoints use the same CLI resolver. The root is explicit, with no environment default, ancestor search, or inference from paths, filenames, headers or prose. Without either flag, existing defaults and behavior remain unchanged.
+2. The approved synthetic layout has `ROOT\<track>\docs\STYLE_SHEET.md` for Slovak and `STYLE_SHEET_EN.md` for English, plus shared `ROOT\docs\SLOVAK_LEXICON.md` for Slovak only. Frames may be nested beneath the selected track directory; `posts`/`episodes` are illustrative, not discovery rules. Only selected/consumed resources are required. The [README contract](../README.md#explicit-tracks-first-phase-2b-increment) documents the layout and safe previews; no real upstream layout or story prose was inspected.
+3. Explicit `--style-sheet` and Slovak `--lexicon` independently replace defaults, including with paths outside the source root. Shared styles require an explicit override; no shared, cross-track or cross-language fallback occurs. A missing/malformed effective resource fails with exit 2. A missing replaced default is irrelevant. Explicit resource overrides never bypass frame/track membership validation.
+4. The root and selected track directory must exist; the selected directory must not be redirected. The resolved frame must stay under that directory, and consumed default resources inside their designated `docs` directory. Invalid tracks, unpaired flags, mismatches and invalid layouts fail with exit 2. Fixed paths eliminate discovery ambiguity: alternative layouts are not searched or guessed.
+5. Language remains explicitly `sk|en`, default `sk`; English never loads Slovak lexicon or morphological checks and rejects explicit `--lexicon` before file/vault access. Wrong-language slot units still fail. Override prose is not used to infer language or track. No-track English still defaults to neighboring `STYLE_SHEET.md`; only tracked English defaults to `STYLE_SHEET_EN.md`.
+6. Dry-run validates effective resources and vault paths without credential/addon reads, HTTP or writes. Lint-only validates the mapping and applicable lexicon but neither reads/requires styles nor accesses the vault; matrix lint-only remains rejected. Legacy and matrix generation reuse existing prompt/QA/model/publication behavior, with messages assembled once for the matrix and unchanged request/retry/concurrency limits.
+7. Track/default/override indicators appear only in redacted terminal metadata for explicitly tracked runs. Persisted Markdown formats, version-1 arena JSON fields, renderer contracts, output filenames and merged-draft behavior are unchanged. Reports do not persist track provenance in this increment. Same-stem cross-track runs retain existing no-overwrite conflicts.
+8. Development and validation use only benign synthetic Tier-1 trees, fresh validated assistant-owned C: test/cache storage, and mocked HTTP. Sources remain read-only during invocation; generated reports/drafts stay inside the validated synthetic vault's `output`. No paid testing, private-vault/credential/addon/upstream inspection, fetching, committing, pushing, PR creation/merging or branch deletion is authorized by this increment.
+
+### Phase 2B Explicit-Track Offline Validation Record (2026-11-10)
+
+- The initial focused contract test failed on the then-unsupported track flags before implementation. After implementation, the focused track/BDD run passed **88 tests**.
+- The combined relevant regression run passed **426 tests in 104.96 seconds**: track unit/subprocess checks, existing both-entrypoint CLI checks, renderer/legacy behavior, English QA, arena reports, arena client limits/retries/concurrency, and BDD features. This was a targeted compatibility gate, not a full-suite rerun; the 88-test run overlaps it and is not an additional test count.
+- Ruff lint and format checks passed for all four modified Python files; strict mypy passed for all 12 source files. Pylance reported no CLI diagnostics, and syntax checks passed for the CLI and new track tests.
+- All execution evidence is offline, using benign synthetic fixtures and mocked HTTP with fresh validated C: temporary/cache storage. No live generation, paid request, private-data inspection or production/upstream acceptance is established.
+
+### Phase 2B (Still Deferred): Continuity-Tail Checks
+
+1. Define which text a `CLEAN_TAIL_CHECK` examines before implementing the proposed closing 150-250-word post-scene continuity check. Clarify whether the target is an existing episode tail or assembled output, not an unrelated short insertion candidate.
+2. Tail length, structure, and configured heuristics may be checked deterministically. Passing such a rule must not be represented as certification that prose is safe Tier 1-2 content; human safety and scene-compliance review remains necessary.
+3. Keep selected-language QA consistent. Future tail rules must not introduce Slovak lexicon or morphological checks into English mode. No tail functionality or tail-length rule is part of the explicit-track increment.
 
 ### Approved Phase 2A Decisions and Public Metadata Snapshot (2026-11-07)
 
@@ -302,7 +319,8 @@ This project-status summary records human-provided redacted diagnostics, an expl
 ### Test Plan
 
 - Phase 2A: synthetic unit/BDD tests cover profile validation/overrides and exact request limits, both entrypoints/languages with approved offline combinations/rejections, mocked payloads/identical messages/stable mapping, deterministic per-model reports/version-1 schema, one global executor and retries/actual attempts, explicit API/strict/non-strict failures, redaction/explicit printing, raw 19/20/80/81/90/99-word threshold controls, unchanged source hashes/BOM/CRLF, immutable contracts, no automatic winner/merge, containment, no overwrites, competing publication, rollback and cleanup. Existing Phase 1 regressions remain covered.
-- Phase 2B, only after separate approval: synthetic track-selection/path-inference tests and precisely scoped continuity-tail tests. No test result certifies semantic Tier 1-2 safety.
+- First Phase 2B increment: synthetic nested track trees cover all explicit tracks/languages, independent default/override resolution, shared resources, missing/malformed resources, invalid/unpaired arguments, source mismatches, Windows junction escapes, lint-only style independence/no-vault access, dry-run redaction/no-private reads/no writes, both entrypoints, mocked single/matrix prompts and outputs, unchanged version-1 schema/filenames, and source hashes/BOM/CRLF. Existing no-track/English/arena regressions remain applicable.
+- Remaining Phase 2B continuity-tail tests require a separately approved scope before implementation. Automatic track inference is excluded. No test result certifies semantic Tier 1-2 safety or literary quality.
 
 ### Perf / Security Notes
 

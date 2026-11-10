@@ -144,3 +144,56 @@ def failed_scorecard(vault: Path) -> None:
     assert failed["scorecard"]["api_failed"] == 3
     assert all(candidate["score"] is None for candidate in failed["candidates"])
     assert "SYNTHETIC_REMOTE_SECRET" not in raw
+
+
+@given("a synthetic English serial track layout", target_fixture="track_preview_args")
+def serial_track(tracks_root: Path) -> list[str]:
+    return [
+        str(tracks_root / "serial" / "episodes" / "nested" / "frame_en.md"),
+        "--track",
+        "serial",
+        "--tracks-root",
+        str(tracks_root),
+        "--language",
+        "en",
+        "--vault-dir",
+        str(tracks_root.parent / "unused-preview-vault"),
+        "--dry-run",
+    ]
+
+
+@when("the explicit track is previewed", target_fixture="track_preview")
+def preview_track(
+    track_preview_args: list[str], capsys: pytest.CaptureFixture[str]
+) -> tuple[int, str]:
+    result = main(track_preview_args)
+    captured = capsys.readouterr()
+    return result, captured.out + captured.err
+
+
+@then("English serial resource selection is reported without output writes")
+def track_resources_reported(track_preview: tuple[int, str], tracks_root: Path) -> None:
+    result, output = track_preview
+    assert result == 0
+    assert "track=serial" in output and "language=en" in output
+    assert "style=track-default" in output and "lexicon=none" in output
+    assert "SYNTHETIC_STYLE" not in output
+    assert not (tracks_root.parent / "unused-preview-vault").exists()
+
+
+@when("the serial frame is previewed as blog", target_fixture="track_preview")
+def preview_mismatched_track(
+    track_preview_args: list[str], capsys: pytest.CaptureFixture[str]
+) -> tuple[int, str]:
+    args = track_preview_args.copy()
+    args[args.index("--track") + 1] = "blog"
+    result = main(args)
+    captured = capsys.readouterr()
+    return result, captured.out + captured.err
+
+
+@then("the track mismatch fails without output writes")
+def track_mismatch_rejected(track_preview: tuple[int, str], tracks_root: Path) -> None:
+    result, output = track_preview
+    assert result == 2 and "[FAIL]" in output
+    assert not (tracks_root.parent / "unused-preview-vault").exists()
