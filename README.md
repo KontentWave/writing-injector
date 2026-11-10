@@ -4,6 +4,8 @@ Python 3.12+ / PowerShell 7 CLI for Slovak and English prose slot parsing,
 deterministic QA, and optional OpenRouter candidate generation. Phase 1 uses
 explicit language selection: Slovak is the backward-compatible default.
 Phase 2A adds an opt-in, report-only multi-model comparison arena.
+The first Phase 2B increment adds explicit tracks with an explicit source root;
+continuity-tail checks remain deferred.
 Automated validation uses benign synthetic fixtures and mocked HTTP; it does
 not establish live English quality or production readiness.
 
@@ -91,8 +93,9 @@ is never auto-detected from prose, headers, filenames, or style sheets.
 Both entrypoints support the same flags and behavior.
 
 Other flags: `--candidates`, `--model`, `--models`, `--temp`, `--min-p`, `--vault-dir`,
-`--style-sheet`, `--lexicon`, `--strict`, and `--print-output`.
-Style paths default to the frame's neighboring `blog\docs\STYLE_SHEET.md`
+`--style-sheet`, `--lexicon`, `--track`, `--tracks-root`, `--strict`, and `--print-output`.
+With neither track flag, style paths still default to the frame's neighboring
+`blog\docs\STYLE_SHEET.md`
 (`post_path.parent.parent / "docs"`). Slovak mode also defaults to its neighboring
 `SLOVAK_LEXICON.md`. English mode neither requires nor reads that lexicon.
 An explicitly supplied `--lexicon` with `--language en` is rejected with exit 2
@@ -111,6 +114,94 @@ rule IDs and line numbers, not matched text or suggestions. Generation findings
 identify the candidate, including before a strict failure exits without drafts.
 Terminal messages are UTF-8, plain text, and never ANSI colored, including when
 `NO_COLOR` is set.
+
+### Explicit tracks: first Phase 2B increment
+
+Both entrypoints accept `--track blog|serial|dark-romance` together with
+`--tracks-root ROOT`. Both flags are required when either is supplied. `ROOT`
+explicitly identifies the directory containing the track directories; there is
+no environment default, ancestor search, or inference from paths, filenames,
+headers, or prose. Relative roots and resource overrides resolve from the
+current working directory.
+
+The supported layout below is a **benign synthetic contract**, not a claim about
+real upstream storage:
+
+```text
+ROOT\
+  docs\
+    SLOVAK_LEXICON.md
+  blog\
+    posts\frame.md
+    docs\STYLE_SHEET.md
+    docs\STYLE_SHEET_EN.md
+  serial\
+    episodes\frame.md
+    docs\STYLE_SHEET.md
+    docs\STYLE_SHEET_EN.md
+  dark-romance\
+    episodes\frame.md
+    docs\STYLE_SHEET.md
+    docs\STYLE_SHEET_EN.md
+```
+
+Frames may be nested anywhere beneath the explicitly selected track directory;
+`posts` and `episodes` are illustrative, not discovery rules. Only the selected
+track and resources consumed by the invocation are required.
+
+| Selected language | Default track style | Default lexicon |
+|---|---|---|
+| `sk` (default) | `ROOT\<track>\docs\STYLE_SHEET.md` | Shared `ROOT\docs\SLOVAK_LEXICON.md` |
+| `en` | `ROOT\<track>\docs\STYLE_SHEET_EN.md` | None; Slovak rules are never loaded |
+
+Each track owns its two styles. Shared styles require an explicit `--style-sheet`
+override; there is no shared-style fallback. Explicit `--style-sheet` and Slovak
+`--lexicon` independently replace their defaults, including with paths outside
+`ROOT`. Missing defaults are irrelevant when replaced, but a missing or malformed
+effective resource fails with exit 2 rather than falling back. Overrides do not
+relax the frame/track membership requirement.
+
+The root and selected track directory must exist. The selected track directory
+must not itself be redirected by a link. The resolved frame must remain beneath
+that directory, and consumed default resources must resolve inside their
+designated `docs` directory. Invalid tracks, unpaired flags, mismatches and invalid
+layouts fail with exit 2; alternative layouts are never searched or guessed.
+
+Language remains explicit, defaulting to Slovak. English `--lexicon` is still
+rejected before file/vault access. Wrong-language slot units still fail; arbitrary
+style prose is not used to detect language or track. Choosing a semantically
+appropriate explicit style override remains the caller's responsibility.
+The English `STYLE_SHEET_EN.md` default applies **only to tracked runs**:
+no-track English retains the existing neighboring `STYLE_SHEET.md` default.
+
+- **Dry-run:** validate the mapping, style, applicable lexicon and vault paths;
+  no credential/addon reads, HTTP, or writes.
+- **Lint-only:** validate the mapping and applicable lexicon, then lint the
+  candidate; styles are neither read nor required, even when explicitly supplied.
+  No vault access occurs. Matrix lint-only remains rejected.
+- **Generation:** use the selected resources with unchanged prompt requirements,
+  language QA, scores, strict exits, single-model behavior and arena budgets,
+  retries/concurrency. Matrix messages are assembled once; no arena winner or
+  merged draft is introduced.
+
+Tracked invocations print redacted track and default/override indicators, not
+resource paths or prose. No-track terminal output is unchanged. Persisted
+Markdown formats, version-1 arena JSON fields, renderer contracts and filenames
+are unchanged: **reports do not persist track provenance in this increment**.
+Matching frame stems across tracks still collide under the existing no-overwrite
+policy; track names are not added to output filenames.
+
+For a separately prepared benign synthetic tree matching the layout:
+
+```powershell
+$tracksRoot = 'C:\synthetic-tracks'
+$syntheticVault = Join-Path $env:LOCALAPPDATA ("Temp\zafo-track-preview-" + [guid]::NewGuid().ToString('N'))
+.\.venv\Scripts\python.exe -m zafo_injector "$tracksRoot\serial\episodes\frame_en.md" --track serial --tracks-root $tracksRoot --language en --vault-dir $syntheticVault --dry-run
+.\.venv\Scripts\zafo-inject.exe "$tracksRoot\serial\episodes\frame_en.md" --track serial --tracks-root $tracksRoot --language en --lint-only .\tests\fixtures\candidate_en.txt --strict
+```
+
+This is only the first Phase 2B increment. `CLEAN_TAIL_CHECK`, tail-length rules,
+all continuity-tail functionality, translation workflows and UI remain deferred.
 
 ### Output and failure policy
 
@@ -149,8 +240,9 @@ Without `--models`, the existing Phase 1 policy is unchanged:
 The following policies were approved on 2026-11-07 and implemented with offline,
 synthetic validation. Matrix mode compares the same parsed frame, style, selected
 language, assembled messages, and bounds. It never selects a winner or produces
-a merged draft. Phase 2B tracks/path detection, `CLEAN_TAIL_CHECK`, translation
-workflows, and Phase 3 UI are not implemented by this phase.
+a merged draft. Explicit tracks are documented separately above. Automatic track
+detection, `CLEAN_TAIL_CHECK`, translation workflows, and Phase 3 UI remain
+unimplemented.
 
 ### Static model profiles and argument policy
 
@@ -369,6 +461,10 @@ concurrency, attempts/retries, explicit API/strict failures, report-only behavio
 redaction, hashes/immutable contracts, no overwrites, containment, rollback, and
 cleanup. Existing single-model regressions remain covered. See the
 [project sheet](<docs/project_sheet .md>) for the approval and validation record.
+The first Phase 2B increment adds synthetic nested track trees, per-language
+resource/default/override checks, missing/invalid inputs, Windows junction
+rejection, both-entrypoint offline checks, mocked single/matrix generation,
+unchanged version-1 reports and BOM/CRLF/source-immutability coverage.
 
 Fresh manual offline gate on 2026-11-07: the clean Phase 1 baseline passed 290
 tests; the completed Phase 2A suite passed **519 tests**, Ruff lint/format passed

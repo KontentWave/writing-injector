@@ -28,6 +28,37 @@ def fixtures() -> Path:
 
 
 @pytest.fixture
+def tracks_root(tmp_path: Path, fixtures: Path) -> Path:
+    root = tmp_path / "synthetic-tracks"
+    shared = root / "docs"
+    shared.mkdir(parents=True)
+    (shared / "SLOVAK_LEXICON.md").write_bytes((fixtures / "SLOVAK_LEXICON.md").read_bytes())
+    for track in ("blog", "serial", "dark-romance"):
+        docs = root / track / "docs"
+        frames = root / track / ("posts" if track == "blog" else "episodes") / "nested"
+        docs.mkdir(parents=True)
+        frames.mkdir(parents=True)
+        for language in ("sk", "en"):
+            suffix = "_en" if language == "en" else ""
+            original = (fixtures / f"frame{suffix}.md").read_bytes()
+            (frames / f"frame{suffix}.md").write_bytes(
+                b"\xef\xbb\xbf" + original.replace(b"\n", b"\r\n")
+            )
+            style_name = "STYLE_SHEET_EN.md" if language == "en" else "STYLE_SHEET.md"
+            style = (
+                (fixtures / style_name)
+                .read_text(encoding="utf-8")
+                .replace(
+                    "## 1. Pinned Golden Voice Sample\n",
+                    f"## 1. Pinned Golden Voice Sample\n\nSYNTHETIC_STYLE_{track}_{language}\n",
+                    1,
+                )
+            )
+            (docs / style_name).write_text(style, encoding="utf-8")
+    return root
+
+
+@pytest.fixture
 def frame(fixtures: Path) -> FrameDocument:
     path = fixtures / "frame.md"
     return parse_frame(path.read_text(encoding="utf-8"), path)
