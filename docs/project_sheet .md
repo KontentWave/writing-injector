@@ -6,7 +6,7 @@
 
 ## 1\. Current State ("As-Built" Present)
 
-- **Version:** `0.1.0` (Phase 1 and report-only Phase 2A implemented and offline-validated; the first Phase 2B explicit-track increment is added. Human-run Phase 1 connectivity and a Phase 2A English smoke are recorded, but formal benchmark acceptance remains unpassed).
+- **Version:** `0.1.0` (Phase 1, report-only Phase 2A, and the first Phase 2B explicit-track increment are implemented and offline-validated; explicit tracks are merged through [PR #5](https://github.com/KontentWave/writing-injector/pull/5). Human-run Phase 1 connectivity, a Phase 2A English smoke, and a successful Phase 2B English Magnum structural smoke with positive user-supplied quality feedback are recorded. Formal English/Slovak benchmark acceptance and continuity-tail implementation remain pending).
 - **Implemented Modules:** Bootstrapper, frozen models, configuration/storage checks, static model-profile registry, language-aware parser/prompt builder/shared QA, shared single/matrix OpenRouter execution, renderer/publication helpers, CLI resource resolution, and synthetic unit/BDD tests. Phase 1 supports explicit `--language sk|en` with Slovak remaining the default. Phase 2A adds opt-in report-only `--models`; the first Phase 2B increment adds paired explicit `--track`/`--tracks-root` selection. No automatic track detection, tail checks, translation workflows, or Phase 3 UI is implemented. See [README](../README.md) for executable commands and supported formats.
 - **Upstream Content Interfaces (Read-Only):**  
   - Story frames: `../zafo-shorts/blog/posts/post_XXX.md` (e.g., `post_002.md`)  
@@ -225,7 +225,7 @@ Deliver a tested, storage-isolated CLI pipeline that parses hybrid story frames,
 
 ### Action
 
-Phase 2A's grouped design gate was approved on 2026-11-07, followed by implementation and synthetic offline validation. Its scope is a report-only comparison arena, not automatic selection/merging or production model acceptance. The first Phase 2B explicit-track contract and feature-branch creation were separately approved on 2026-11-10. This increment does not complete all Phase 2B work: automatic track detection is excluded, and `CLEAN_TAIL_CHECK`, all continuity-tail functionality, translation workflows, and UI remain deferred.
+Phase 2A's grouped design gate was approved on 2026-11-07, followed by implementation and synthetic offline validation. Its scope is a report-only comparison arena, not automatic selection/merging or production model acceptance. The first Phase 2B explicit-track contract and feature-branch creation were separately approved on 2026-11-10; after offline validation and separate publication approvals, [PR #5](https://github.com/KontentWave/writing-injector/pull/5) merged that day. This increment does not complete all Phase 2B work: automatic track detection is excluded, and `CLEAN_TAIL_CHECK`, all continuity-tail functionality, translation workflows, and UI remain deferred.
 
 ### Phase 2A (Implemented): Offline-Validated Multi-Model Comparison Arena
 
@@ -281,7 +281,7 @@ This project-status summary records human-provided redacted diagnostics, an expl
 5. Language remains explicitly `sk|en`, default `sk`; English never loads Slovak lexicon or morphological checks and rejects explicit `--lexicon` before file/vault access. Wrong-language slot units still fail. Override prose is not used to infer language or track. No-track English still defaults to neighboring `STYLE_SHEET.md`; only tracked English defaults to `STYLE_SHEET_EN.md`.
 6. Dry-run validates effective resources and vault paths without credential/addon reads, HTTP or writes. Lint-only validates the mapping and applicable lexicon but neither reads/requires styles nor accesses the vault; matrix lint-only remains rejected. Legacy and matrix generation reuse existing prompt/QA/model/publication behavior, with messages assembled once for the matrix and unchanged request/retry/concurrency limits.
 7. Track/default/override indicators appear only in redacted terminal metadata for explicitly tracked runs. Persisted Markdown formats, version-1 arena JSON fields, renderer contracts, output filenames and merged-draft behavior are unchanged. Reports do not persist track provenance in this increment. Same-stem cross-track runs retain existing no-overwrite conflicts.
-8. Development and validation use only benign synthetic Tier-1 trees, fresh validated assistant-owned C: test/cache storage, and mocked HTTP. Sources remain read-only during invocation; generated reports/drafts stay inside the validated synthetic vault's `output`. No paid testing, private-vault/credential/addon/upstream inspection, fetching, committing, pushing, PR creation/merging or branch deletion is authorized by this increment.
+8. Development and validation use only benign synthetic Tier-1 trees, fresh validated assistant-owned C: test/cache storage, and mocked HTTP. Sources remain read-only during invocation; generated reports/drafts stay inside the validated synthetic vault's `output`. Implementation approval did not authorize publication or live testing; commit/push/PR creation, merging, and fetching/local-main synchronization were separately approved and are recorded below. No paid testing, private-vault/credential/addon/upstream inspection or branch deletion was part of this delivery.
 
 ### Phase 2B Explicit-Track Offline Validation Record (2026-11-10)
 
@@ -290,11 +290,53 @@ This project-status summary records human-provided redacted diagnostics, an expl
 - Ruff lint and format checks passed for all four modified Python files; strict mypy passed for all 12 source files. Pylance reported no CLI diagnostics, and syntax checks passed for the CLI and new track tests.
 - All execution evidence is offline, using benign synthetic fixtures and mocked HTTP with fresh validated C: temporary/cache storage. No live generation, paid request, private-data inspection or production/upstream acceptance is established.
 
+### Phase 2B Publication & Current Checkpoint (Merged 2026-11-10; Reverified 2026-11-11)
+
+- **Published increment:** Commit `607af582d35587bb8938dd337d11fb2d01254e6b` on `feature/phase2b-explicit-tracks` was committed, pushed and submitted as [PR #5](https://github.com/KontentWave/writing-injector/pull/5) after explicit authorization. A later, separate authorization released the merge. Direct pre-merge review found no blocking findings; GitHub reported no check results, so the validation record above remains manual offline evidence, not hosted CI.
+- **Merged baseline:** PR #5 merged on 2026-11-10 as `f6e53e8acaf8ae45b29977d02c2ac4eaff0db71a`. Its tree `1dd514add5b792b0559a3231f4e9038a720e8b85` exactly matched the offline-validated feature tree; the merge introduced no additional implementation changes.
+- **Local synchronization:** After separate approval, `origin/main` was fetched and local `main` fast-forwarded without force/reset. Read-only checks on 2026-11-11 reconfirmed local HEAD, local `origin/main`, and independently queried GitHub `main` all at the merged baseline, with a clean worktree before this documentation update. The local and GitHub feature branches were retained at `607af582d35587bb8938dd337d11fb2d01254e6b`.
+- **Compatibility and remaining scope:** Both entrypoints, explicit language separation, no-track defaults, model profiles, QA/scoring/strict exits, arena limits and report/output contracts remain as documented above. Track provenance is terminal-only; same-stem output conflicts retain the no-overwrite policy. This is the first Phase 2B increment, not completion of continuity-tail work or production/upstream acceptance.
+- **Earlier stop point:** On 2026-11-11, the user initially chose to document progress rather than start live testing; no Phase 2B live request had occurred at that checkpoint. The later human-only English smoke below received separate prompt-transmission and spending approval. Merge approval itself released neither paid testing nor formal benchmark acceptance.
+- **Initial documentation-only follow-up:** The publication checkpoint used read-only repository/GitHub metadata and tree-identity checks. No Python tests were rerun, dependencies installed, runtime code changed, private data inspected or new Git publication performed during that follow-up.
+
+### Phase 2B Human English Magnum Smoke Checkpoint (2026-11-11)
+
+This checkpoint records human-provided redacted terminal diagnostics, a reported cost, and a user-supplied qualitative assessment. The assistant did not open the human live vault or its prose-bearing reports. No credentials, addons, prompts, candidate prose or private vault paths are reproduced here.
+
+- **Scope and model attribution:** The human invoked single-model generation with `--track blog`, explicit `--tracks-root`, `--language en`, `--model anthracite-org/magnum-v4-72b`, `--candidates 1` and `--strict`, without an addon or Slovak lexicon. The recorded request was already **Magnum v4 72B**, not GPT; references to a GPT baseline or a subsequent switch to Magnum in the supplied review do not match the posted command. No Euryale trial or model-registry change was part of this smoke.
+- **Inputs and offline preparation:** A separate benign synthetic Tier-1 English adaptation preserved an empty insertion slot followed by existing closing prose. Its insertion bounds were unchanged at **140-220 words**, with a 190-word existing ending. A prepared control fixture, not a model response, had 180 words, three paragraphs and score 100. Both entrypoints passed dry-run and strict lint-only with unchanged input hashes/mtimes. Before credential setup, a fresh external C: human-smoke vault path passed existing storage validation; offline checks neither created that vault nor performed inference.
+- **Human execution:** The first invocation failed local API-key validation with exit 2, before inference. The human corrected the private configuration and repeated the invocation with fresh source/style hashes. This local failure is not an API retry or a second generated candidate.
+
+| Invocation | Words | Paragraphs | Score | Exit | Outcome |
+|---|---:|---:|---:|---:|---|
+| Initial local configuration failure | - | - | - | 2 | Rejected before inference; no drafts. |
+| Corrected human live invocation | 174 | 4 | 100 | 0 | Generated candidate passed strict structural QA; both drafts published. |
+
+- **Publication and immutability:** Terminal output reported `frame_en.candidates.md` and `frame_en.merged.md` written inside the fresh synthetic vault's `output` directory. Fresh before/after source and style hashes were reported unchanged for both invocations. The no-addon warning was expected. This was legacy single-model publication, not an arena comparison.
+- **Reported cost and execution limits:** The human reported **USD 0.00241**, within the separately approved USD 0.10 smoke budget. Billing was not independently inspected. Existing retry limits allowed at most three HTTP attempts for the successful invocation; its actual attempt count, provider, token usage and latency were not supplied. Request limits do not enforce a dollar cap.
+- **User-supplied quality assessment:** The supplied review judged the English smoke solidly satisfactory, with natural entry/exit transitions, appropriate style, concrete details and good continuity. Minor editorial notes concerned explanatory telling, a procedural closing summary and a possible physical-staging ambiguity. This is qualitative feedback supplied by the user, not an independent full-text assessment by the assistant or a new deterministic acceptance rule. General claims about other models' tendencies were not established by this run.
+- **Acceptance and next boundary:** This is a successful human-run English structural smoke with positive qualitative feedback, not formal English/Slovak benchmark acceptance, production readiness or prose/content-safety certification. The distinct 140-220-word fixture does not retroactively pass earlier 20-80-word failures. QA, scoring, strict exits, model profiles, sampling and output contracts remain unchanged. No further paid invocation is released by this record; continuity-tail design and implementation remain paused and unapproved.
+
+### Phase 2B Human Slovak Magnum Smoke Checkpoint (2026-11-11)
+
+This checkpoint records human-provided redacted terminal diagnostics only. The assistant did not open the human live vault or any candidate/report content. No credentials, addons, prompts, candidate prose or private vault paths are reproduced here.
+
+- **Scope and preparation:** A fresh benign synthetic Tier-1 Slovak library-volunteer fixture used the explicit `blog` track, a track-local Slovak style sheet and shared synthetic Slovak lexicon. It retained the 140-220-word insertion bounds. The separately prepared control fixture, not a model response, had 173 words, three paragraphs, score 100 and no findings. Both entrypoints passed dry-run and strict lint-only; focused in-memory probes confirmed one hard rejection each for a Czechism, the configured English calque and female narrator morphology. A fresh external C: human-smoke vault path passed both exact-argument dry-run checks without being created.
+- **Human execution:** The human then invoked single-model generation with `--track blog`, explicit `--tracks-root`, `--language sk`, `--model anthracite-org/magnum-v4-72b`, `--candidates 1` and `--strict`, without an addon. The candidate had 118 words and six paragraphs, violating both required structural bounds.
+
+| Candidate | Words | Paragraphs | Score | Exit | Outcome |
+|---|---:|---:|---:|---:|---|
+| Human live candidate 1 | 118 | 6 | 50 | 5 | Failed `WORD_COUNT` and `PARAGRAPH_BOUNDS`; strict mode wrote no drafts. |
+
+- **Immutability and execution limits:** Terminal output reported unchanged hashes for the frame, style sheet and lexicon. The expected no-addon warning appeared. Existing retry limits allowed up to three HTTP attempts, but actual attempt count, provider, token usage, latency and billed cost were not supplied. Because generation occurred, a charge may have been incurred even though strict mode prevented publication.
+- **Interpretation and next boundary:** This is a failed Slovak structural smoke, not a prose-quality finding, formal Slovak benchmark acceptance, a reason to change word/paragraph QA, or evidence that the offline fixture/control is invalid. No output publication, rerun, model replacement, sampling change or further paid invocation is released by this record. Any subsequent paid test requires separate approval.
+
 ### Phase 2B (Still Deferred): Continuity-Tail Checks
 
 1. Define which text a `CLEAN_TAIL_CHECK` examines before implementing the proposed closing 150-250-word post-scene continuity check. Clarify whether the target is an existing episode tail or assembled output, not an unrelated short insertion candidate.
 2. Tail length, structure, and configured heuristics may be checked deterministically. Passing such a rule must not be represented as certification that prose is safe Tier 1-2 content; human safety and scene-compliance review remains necessary.
 3. Keep selected-language QA consistent. Future tail rules must not introduce Slovak lexicon or morphological checks into English mode. No tail functionality or tail-length rule is part of the explicit-track increment.
+4. The 2026-11-11 design discussion considered an explicit opt-in check of a marked, existing post-slot ending, with inclusive 150-250-word bounds and a separate strict gate. These were tentative design preferences, not approval of the concrete contract or a feature branch. Footer handling and formatting-only context items remain unresolved; the human smoke above exercised existing injection, not `CLEAN_TAIL_CHECK`.
 
 ### Approved Phase 2A Decisions and Public Metadata Snapshot (2026-11-07)
 
