@@ -44,6 +44,7 @@ The English fixture slot required 20-80 words:
 zafo-injector/
 ├── AGENTS.md                          # Workspace guardrail: forbids agent execution of live injector or reading ~/zafo-local
 ├── pyproject.toml                     # Python 3.12 package metadata, CLI entrypoint, pytest, pytest-bdd, ruff, mypy
+├── writing-injector.ps1               # Optional thin PowerShell launcher; generation off by default
 ├── docs/
 │   ├── PROJECT_ROADMAP.md             # Strategic vision & phased backlog (Step 1: PLAN)
 │   ├── project_sheet.md               # Living technical spec & phase blueprints (Step 2: DRAFT)
@@ -400,11 +401,11 @@ This record uses human-provided redacted terminal diagnostics and the human's qu
 
 &nbsp;
 
-## 6\. Phase 3: Configuration-Driven CLI (Increment A) & Deferred Human-Run Launcher
+## 6\. Phase 3: Configuration-Driven CLI (3A) & Thin Human-Run Launcher (3B)
 
 ### Action
 
-Deliver explicit, non-secret run defaults through the existing shared CLI. Keep the optional thin PowerShell launcher and localhost picker deferred rather than introduce another generation pipeline.
+Deliver explicit, non-secret run defaults and an optional thin PowerShell launcher through the existing shared CLI, without another generation pipeline. Keep the localhost picker deferred.
 
 ### Status and Approval Boundary
 
@@ -412,6 +413,7 @@ Deliver explicit, non-secret run defaults through the existing shared CLI. Keep 
 - The human approved vault precedence `CLI > ZAFO_VAULT_DIR > TOML > legacy fallback` and effective track/root pairing after merging, including mixed CLI/TOML origins. Launcher implementation was explicitly deferred.
 - That implementation approval did not authorize real-vault creation or inspection, migration, Git publication, prompt transmission, or paid generation. Assistants remain limited to benign synthetic C: test vaults and mocked HTTP.
 - **Scoped Git publication separately approved on 2026-11-12.** Approval covers the six Phase 3A configuration, test and documentation files through a feature branch, scoped commit, push, PR review/checks, merge and return to `main`. The pre-existing ignore-file edit was excluded and remained local at that stage; its subsequent rollback was verified during the CI-gate work below. This changes only the Git publication boundary, not the restrictions on real-vault access, prompt transmission, live generation or deferred features.
+- **Increment B explicitly approved for local implementation on 2026-11-12.** Scope is the root launcher, focused additions to the existing subprocess tests, README and this project sheet, a local feature branch and offline validation. Earlier publication/merge approvals are completed and do not authorize staging or publishing these four launcher files. Production Python, bootstrap, provider, renderer, QA, dependencies, workflows, UI, setup/migration and live acceptance remain outside this increment.
 - The proposed per-user layout below remains uncreated, uninspected, and unvalidated by the assistant. It is not a new CLI default or automatic discovery rule. The human must privately confirm genuinely unsynchronized, nonredirected storage; neither the path string nor `LOCALAPPDATA` proves that property.
 
 ### Configuration and Storage Contract
@@ -531,6 +533,59 @@ if ($pytestOutput -match '\bskipped\b') { throw 'Unexpected skipped coverage in 
 & $python -B -m mypy --strict --cache-dir $env:MYPY_CACHE_DIR src
 ```
 
+### Phase 3B Thin PowerShell Launcher (2026-11-12; Pre-Publication Local Record)
+
+- **Verified baseline:** clean `main`, local HEAD, `origin/main` and remote GitHub `main` all at `b79cf8a42a6c7b8354751997cda19c751e68c2b0`. PR [#9](https://github.com/KontentWave/writing-injector/pull/9) was merged with exactly the workflow, README and project-sheet changes. Read-only metadata confirmed its [push run](https://github.com/KontentWave/writing-injector/actions/runs/43236557834) succeeded and the one bounded Windows workflow is active. Its historical hosted **280-pass, zero-skip** record is distinct from this unpublished launcher's fresh local results. The ignore-file rollback and empty index were preserved.
+- The fresh, unchanged settings/subprocess baseline collected **280 tests and passed 280 in 168.37 seconds, with zero skips**. Only afterward was local branch `feat/phase3b-thin-powershell-launcher` created. No reset, stash, rebase, staging, commit, push, PR creation or hosted workflow execution occurred.
+- **Executable policy, clarified before editing:** [writing-injector.ps1](../writing-injector.ps1) uses only `.venv\Scripts\zafo-inject.exe` relative to the launcher. There is no executable override, environment configuration, `PATH` search, interpreter fallback, installation, settings discovery, vault setup or migration.
+- **Mode policy, clarified before editing:** bare invocation or `-CliArgs @()` forwards help only. Other invocations prepend `--dry-run` unless an actual complete help/dry-run/lint-only option occurs before the first standalone `--`, or the human explicitly supplies the launcher's `-Generate` switch. `--lint-only=FILE` and `-h` are supported safe forms. Embedded flag-shaped values and options after `--` cannot suppress the prepended protection; forwarded `'-Generate'` cannot grant permission.
+- Explicit `--lint-only`, `--dry-run` and help stay effective with or without `-Generate`; the switch never strips safe modes or forces generation. Conflicting modes retain shared CLI handling. Explicit `--print-output` is forwarded unchanged even in safe modes, is never added automatically and never implies generation. Settings cannot select either permission. `-Generate` with omitted/empty arguments exits **2** without a child; a single empty string is preserved as an argument, not treated as bare help.
+- The wrapper uses `ProcessStartInfo.ArgumentList` and inherited stdout/stderr handles, without expression evaluation or a reconstructed command string. The child's working directory is the caller's PowerShell filesystem location, including after `Set-Location`; the caller location is unchanged. Child exits propagate. Missing runtime, native launch failure and non-filesystem location diagnostics are fixed/redacted and exit **2**. The wrapper reads no settings, sources, vault files, provider data, credentials or addons. Direct CLI generation defaults are unchanged.
+- Focused regressions live only in [test_cli_subprocess.py](../tests/unit/test_cli_subprocess.py), so the existing CI selectors include them without workflow changes. A copied native console stub plus a new standard-library ZIP entrypoint records synthetic tokens and working directory; no compiler or added dependency is needed. Every `-Generate` case uses this fake executable, never the real application. Real launcher checks use bare/explicit help, default dry-run and lint-only, with relative synthetic TOML/input paths, undecodable synthetic credential/addon sentinels, unchanged BOM/CRLF sources and no outputs.
+- The first focused run exposed a **test-harness** native ZIP-offset problem: **13 failed, 7 passed in 19.16 seconds**. The synthetic ZIP entrypoint ran under Python, but its native stub exited before dispatch. Building a standalone ZIP with relative archive offsets before concatenating the existing stub fixed that root cause; no launcher protection or existing test was bypassed. With two additional empty-token/separator cases, the focused confirmation passed **22 tests in 20.92 seconds**, with **196 deselected and zero skips**.
+- **Fresh final combined gate:** **302 collected, 302 passed in 210.25 seconds, zero skips**. This includes the focused cases; overlapping baseline/focused results are not added. Both existing module/console entrypoints, Windows junction coverage, source immutability and offline-isolation assertions remain intact. No full suite or runtime matrix was run.
+- Existing tools were used read-only: CPython **3.12.4**, pytest **9.2.0**, Ruff **0.17.3**, mypy **2.4.1**, PowerShell **7.6.10**. No packages/tools were installed or upgraded. The existing no-cache Ruff lint/format selectors passed for all **four** selected Python files; strict mypy passed for all **13** source files. PowerShell parsed the launcher successfully; Pylance reported no Python syntax errors in the changed test file. These checks cover the observed local Windows/runtime combination, not every PowerShell version or hosted launcher execution.
+- Before every Python execution, bytecode and pytest/Ruff caches were disabled; `TEMP`, `TMP`, `TMPDIR`, bytecode/cache locations and pytest base directories were confined to fresh assistant-owned C: storage. That area passed the unchanged `validate_storage_path` and nonredirected-ancestor checks. Credential/vault/cloud overrides and Python injection overrides were removed without printing values, and subprocesses inherited the protections. Generated synthetic application drafts/reports stayed in validated synthetic vault outputs; harness files stayed in the disposable test area, never on D:.
+- All five specifically identified test/cache subdirectories, the protection helper and the empty C: task root were removed, with absence verified and without following links. No real vault, vault override or personal application settings were inspected; no live generation/provider request occurred. The workflow, ignore file, production Python, bootstrapper, dependencies and index remain unchanged. The Node action annotation was not altered.
+- **Later file-scoped publication separately approved after local validation:** the exact scope is [writing-injector.ps1](../writing-injector.ps1), [test_cli_subprocess.py](../tests/unit/test_cli_subprocess.py), [README.md](../README.md) and this project sheet only. The human approved a later staging/commit/push/PR step, explicitly with no publication in that implementation turn. Merge and live generation were not included. Nothing was staged or published at that checkpoint; local passing commands do not establish hosted CI success.
+
+The exact main local commands are below. `$python` was `D:\zafo-injector\.venv\Scripts\python.exe`; `$root` was `C:\zafo-phase3b-9ffb543a04cb44ce9161d375de9b5980`, now removed. Commands ran from the original source working copy without project build/install operations; generated validation data stayed on C:. A temporary protection helper ran the unchanged storage validator before Python, set `PYTHONDONTWRITEBYTECODE=1`, `PYTHONIOENCODING=utf-8`, `TEMP=$root`, `TMP=$root`, `TMPDIR=$root`, `PYTHONPYCACHEPREFIX=$root\bytecode`, `MYPY_CACHE_DIR=$root\mypy-cache`, `RUFF_NO_CACHE=1`, `RUFF_CACHE_DIR=$root\ruff-cache`, `PYTEST_ADDOPTS=-p no:cacheprovider` and `NO_COLOR=1`, and removed `OPENROUTER_API_KEY`, `ZAFO_VAULT_DIR`, `GOOGLE_DRIVE_DIR`, `PYTHONPATH`, `PYTHONHOME`, `PYTEST_PLUGINS` and `PYTHONSTARTUP` without printing values.
+
+```powershell
+# Unchanged baseline; then the initial failing and corrected focused runs.
+& $python -B -m pytest -rs --tb=short -p no:cacheprovider --basetemp "$root\pytest-baseline" tests\unit\test_settings.py tests\unit\test_cli_subprocess.py
+& $python -B -m pytest -q -rs --tb=short -p no:cacheprovider --basetemp "$root\pytest-launcher" tests\unit\test_cli_subprocess.py -k powershell_launcher
+& $python -B -m pytest -q -rs --tb=short -p no:cacheprovider --basetemp "$root\pytest-launcher-fixed" tests\unit\test_cli_subprocess.py -k powershell_launcher
+
+# Final required combined gate, rejecting any unexpected skips.
+& $python -B -m pytest -rs --tb=short -p no:cacheprovider --basetemp "$root\pytest-targeted" tests\unit\test_settings.py tests\unit\test_cli_subprocess.py |
+    Tee-Object -Variable pytestOutput
+if ($LASTEXITCODE -ne 0) { throw 'Combined settings/subprocess gate failed.' }
+if ($pytestOutput -match '\bskipped\b') { throw 'Unexpected skipped targeted coverage.' }
+
+& $python -B -m ruff format --no-cache tests\unit\test_cli_subprocess.py
+$files = @(
+    'src\zafo_injector\settings.py',
+    'src\zafo_injector\cli.py',
+    'tests\unit\test_settings.py',
+    'tests\unit\test_cli_subprocess.py'
+)
+& $python -B -m ruff check --no-cache @files
+& $python -B -m ruff format --check --no-cache @files
+& $python -B -m mypy --strict --cache-dir $env:MYPY_CACHE_DIR src
+
+$tokens = $null
+$errors = $null
+$null = [System.Management.Automation.Language.Parser]::ParseFile(
+    'D:\zafo-injector\writing-injector.ps1', [ref]$tokens, [ref]$errors)
+if ($errors.Count -ne 0) { throw 'PowerShell syntax parsing failed.' }
+```
+
+### Phase 3B Publication Authorization (2026-11-12)
+
+- After the local checkpoint above, the human explicitly requested execution of the approved four-file staging/commit/push/PR step through the existing WSL Git/gh setup. Merge, manual workflow dispatch and live generation remain unapproved.
+- The pre-publication local results above are preserved, not reclassified as hosted evidence. Only publication-status wording changed afterward; launcher/test code was not changed or rerun for those documentation-only edits. The pull request records actual publication and any naturally triggered hosted checks.
+
 ### Perf / Security Notes
 
 - No assistant access to real vaults, credentials, addons, reports, candidates, or upstream prose, including any vault override. No automatic setup, file moves, deletion, or cleanup of human evidence.
@@ -538,7 +593,7 @@ if ($pytestOutput -match '\bskipped\b') { throw 'Unexpected skipped coverage in 
 
 ### Deferred Work
 
-- The optional thin `writing-injector.ps1` launcher requires separate implementation approval. The planning interface is bare help, otherwise injected dry-run, with only explicit human `-Generate -CliArgs <string[]>` permitting generation dispatch and explicitly forwarded `--print-output` permitting prose printing. Settings cannot enable either action. A future launcher must forward token arrays without expression evaluation, preserve caller-relative paths and child exit codes, and test paid-dispatch branches only with a fake executable. No human paid invocation is approved by this planning interface.
+- Execution of the separately approved later four-file publication step remains deferred; merging and any human paid acceptance of the locally implemented Phase 3B launcher still require separate explicit approval. The local implementation and fake dispatch tests approve neither operation.
 - The localhost candidate picker and inline diff/editor remain a later optional backlog, not part of this configuration increment. No `--serve` implementation is approved.
 - If revisited, retain loopback-only `127.0.0.1` binding, an ephemeral port, CSRF protection, non-loopback `Host` rejection, no external assets/telemetry, keyboard-accessible semantic candidate selection and annotations, and accessible save confirmations. Edited exports must use the validated selected vault's `output`, not a hard-coded home path.
 - Continuity-tail work and automatic translation remain unapproved. The human workflow remains English drafting followed by manual Slovak translation and editing; this proposal does not authorize more paid Slovak smokes.

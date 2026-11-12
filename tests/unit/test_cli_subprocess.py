@@ -1,9 +1,17 @@
+import json
 import os
+import shutil
 import subprocess
 import sys
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
+
+from zafo_injector.config import validate_storage_path
+
+LAUNCHER = Path(__file__).resolve().parents[2] / "writing-injector.ps1"
 
 
 @pytest.mark.parametrize("entrypoint", ["module", "console"])
@@ -291,3 +299,245 @@ def test_configured_offline_entrypoints(
     assert (source.read_bytes(), source.stat().st_mtime_ns) == original
     for path in (vault, environment_vault):
         assert sorted(child.name for child in path.iterdir()) == [".env", "TIER4_ADDON.txt"]
+
+
+def _prepare_launcher(
+    tmp_path: Path, *, fake: bool = True, exit_code: int = 0
+) -> tuple[Path, Path]:
+    if os.name != "nt":
+        pytest.skip("Launcher coverage requires a Windows console executable.")
+    assert tmp_path.drive.casefold() == "c:"
+    assert validate_storage_path(tmp_path, LAUNCHER.parent) == tmp_path
+    launcher = tmp_path / "launcher" / LAUNCHER.name
+    launcher.parent.mkdir()
+    shutil.copyfile(LAUNCHER, launcher)
+    executable = launcher.parent / ".venv" / "Scripts" / "zafo-inject.exe"
+    executable.parent.mkdir(parents=True)
+    installed = Path(sys.executable).with_name("zafo-inject.exe")
+    if not fake:
+        shutil.copyfile(installed, executable)
+        return launcher, executable
+
+    # Preserve the native stub/shebang and ZIP-relative offsets expected by its loader.
+    with ZipFile(installed) as archive:
+        assert "__main__.py" in archive.namelist()
+        offset = min(entry.header_offset for entry in archive.infolist())
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        archive.writestr(
+            "__main__.py",
+            "import json, os, sys\n"
+            "from pathlib import Path\n"
+            "Path(sys.argv[0]).with_suffix('.json').write_text("
+            "json.dumps({'args': sys.argv[1:], 'cwd': os.getcwd()}), encoding='utf-8')\n"
+            "print('SYNTHETIC_LAUNCHER_STDOUT')\n"
+            "print('SYNTHETIC_LAUNCHER_STDERR', file=sys.stderr)\n"
+            f"raise SystemExit({exit_code})\n",
+        )
+    executable.write_bytes(installed.read_bytes()[:offset] + payload.getvalue())
+    return launcher, executable
+
+
+def _run_launcher(
+    launcher: Path,
+    args: list[str] | None = None,
+    *,
+    generate: bool = False,
+    process_dir: Path | None = None,
+    location: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    pwsh = shutil.which("pwsh")
+    assert pwsh is not None, "PowerShell 7 is required; launcher coverage must not be skipped."
+    process_dir = process_dir or launcher.parent
+    location = location or process_dir
+    invocation = launcher.parent / "invocation.json"
+    invocation.write_text(
+        json.dumps(
+            {
+                "launcher": str(launcher),
+                "args": args,
+                "include_args": args is not None,
+                "generate": generate,
+                "location": str(location),
+            }
+        ),
+        encoding="utf-8",
+    )
+    quoted_invocation = str(invocation).replace("'", "''")
+    command = (
+        "$ErrorActionPreference = 'Stop'; "
+        f"$invocation = Get-Content -Raw -LiteralPath '{quoted_invocation}' | ConvertFrom-Json; "
+        "Set-Location -LiteralPath $invocation.location; "
+        "$before = (Get-Location).ProviderPath; "
+        "$parameters = @{}; "
+        "if ($invocation.include_args) { $parameters.CliArgs = [string[]]$invocation.args }; "
+        "if ($invocation.generate) { $parameters.Generate = $true }; "
+        "& $invocation.launcher @parameters; $code = $LASTEXITCODE; "
+        "if ((Get-Location).ProviderPath -cne $before) { "
+        "throw 'Launcher changed the caller location.' }; exit $code"
+    )
+    env = os.environ.copy()
+    for name in (
+        "OPENROUTER_API_KEY",
+        "ZAFO_VAULT_DIR",
+        "GOOGLE_DRIVE_DIR",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTEST_PLUGINS",
+    ):
+        env.pop(name, None)
+    env.update(
+        PYTHONDONTWRITEBYTECODE="1",
+        TEMP=str(launcher.parent),
+        TMP=str(launcher.parent),
+        TMPDIR=str(launcher.parent),
+        PATH=str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", ""),
+    )
+    return subprocess.run(
+        [pwsh, "-NoProfile", "-NonInteractive", "-Command", command],
+        cwd=process_dir,
+        capture_output=True,
+        encoding="utf-8",
+        env=env,
+        timeout=30,
+    )
+
+
+@pytest.mark.parametrize(
+    ("args", "generate", "expected"),
+    [
+        (None, False, ["--help"]),
+        ([], False, ["--help"]),
+        ([""], False, ["--dry-run", ""]),
+        (["--", "--lint-only"], False, ["--dry-run", "--", "--lint-only"]),
+        (["frame.md"], False, ["--dry-run", "frame.md"]),
+        (["frame.md"], True, ["frame.md"]),
+        (["frame.md", "--dry-run"], False, ["frame.md", "--dry-run"]),
+        (["frame.md", "--dry-run"], True, ["frame.md", "--dry-run"]),
+        (
+            ["frame.md", "--lint-only", "candidate.txt"],
+            False,
+            ["frame.md", "--lint-only", "candidate.txt"],
+        ),
+        (
+            ["frame.md", "--lint-only=candidate.txt"],
+            True,
+            ["frame.md", "--lint-only=candidate.txt"],
+        ),
+        (["--help"], True, ["--help"]),
+        (["-h"], False, ["-h"]),
+        (
+            ["frame.md", "--print-output"],
+            False,
+            ["--dry-run", "frame.md", "--print-output"],
+        ),
+        (["frame.md", "--print-output"], True, ["frame.md", "--print-output"]),
+    ],
+)
+def test_powershell_launcher_dispatch(
+    tmp_path: Path, args: list[str] | None, generate: bool, expected: list[str]
+) -> None:
+    launcher, executable = _prepare_launcher(tmp_path)
+    result = _run_launcher(launcher, args, generate=generate)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == "SYNTHETIC_LAUNCHER_STDOUT\n"
+    assert result.stderr == "SYNTHETIC_LAUNCHER_STDERR\n"
+    assert (
+        json.loads(executable.with_suffix(".json").read_text(encoding="utf-8"))["args"] == expected
+    )
+
+
+def test_powershell_launcher_exact_tokens_location_and_child_failure(tmp_path: Path) -> None:
+    launcher, executable = _prepare_launcher(tmp_path, exit_code=37)
+    process_dir = tmp_path / "original-process-directory"
+    caller = tmp_path / "caller's location"
+    process_dir.mkdir()
+    caller.mkdir()
+    args = [
+        r".\relative frame.md",
+        "--model=--dry-run",
+        "--config=--help",
+        "--style-sheet=--lint-only",
+        "",
+        "double \"quotes\" and 'single quotes'",
+        "trailing slash\\",
+        "; & | < > $() ` $(throw 'must not evaluate')",
+        "-Generate",
+        "--",
+        "--help",
+        "--dry-run",
+        "--lint-only",
+        "--print-output",
+    ]
+    result = _run_launcher(launcher, args, process_dir=process_dir, location=caller)
+    assert result.returncode == 37, result.stdout + result.stderr
+    assert result.stdout == "SYNTHETIC_LAUNCHER_STDOUT\n"
+    assert result.stderr == "SYNTHETIC_LAUNCHER_STDERR\n"
+    record = json.loads(executable.with_suffix(".json").read_text(encoding="utf-8"))
+    assert record["args"] == ["--dry-run", *args]
+    assert Path(record["cwd"]) == caller
+
+
+@pytest.mark.parametrize("mode", ["bare", "help", "dry", "lint"])
+def test_powershell_launcher_real_offline_modes(tmp_path: Path, fixtures: Path, mode: str) -> None:
+    launcher, _ = _prepare_launcher(tmp_path, fake=False)
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    source = caller / "frame.md"
+    original = b"\xef\xbb\xbf" + (fixtures / "frame_en.md").read_bytes().replace(b"\n", b"\r\n")
+    source.write_bytes(original)
+    before = source.stat().st_mtime_ns
+    (caller / "style.md").write_bytes((fixtures / "STYLE_SHEET_EN.md").read_bytes())
+    candidate = caller / "candidate.txt"
+    candidate.write_bytes((fixtures / "candidate_en.txt").read_bytes())
+    vault = tmp_path / "synthetic-vault"
+    vault.mkdir()
+    (vault / ".env").write_bytes(b"\xff")
+    (vault / "TIER4_ADDON.txt").write_bytes(b"\xff")
+    (caller / "defaults.toml").write_text(
+        "language = 'en'\nstyle_sheet = 'style.md'\nvault_dir = '..\\synthetic-vault'\n",
+        encoding="utf-8",
+    )
+    args = [r".\frame.md", "--config", r".\defaults.toml"]
+    if mode == "bare":
+        args = None
+    elif mode == "help":
+        args = ["--config", "missing-synthetic-settings.toml", "--help"]
+    elif mode == "dry":
+        args += ["--print-output"]
+    else:
+        args += ["--lint-only", r".\candidate.txt"]
+    result = _run_launcher(launcher, args, location=caller)
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "Traceback" not in output
+    if mode in ("bare", "help"):
+        assert "--config FILE" in output
+    else:
+        assert "[PASS]" in output
+        assert "language=en" in output
+    assert candidate.read_text(encoding="utf-8").strip() not in output
+    assert source.read_bytes() == original
+    assert source.stat().st_mtime_ns == before
+    assert sorted(path.name for path in vault.iterdir()) == [".env", "TIER4_ADDON.txt"]
+
+
+@pytest.mark.parametrize("failure", ["empty-generation", "missing-runtime", "launch-failure"])
+def test_powershell_launcher_usage_and_runtime_failures(tmp_path: Path, failure: str) -> None:
+    launcher, executable = _prepare_launcher(tmp_path)
+    args = ["--help"]
+    if failure == "missing-runtime":
+        executable.unlink()
+    elif failure == "launch-failure":
+        executable.write_bytes(b"not an executable")
+        args = ["SYNTHETIC_ARGUMENT_MUST_NOT_BE_ECHOED"]
+    result = _run_launcher(
+        launcher,
+        [] if failure == "empty-generation" else args,
+        generate=failure == "empty-generation",
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.stdout == ""
+    assert "[FAIL]" in result.stderr
+    assert "SYNTHETIC_ARGUMENT_MUST_NOT_BE_ECHOED" not in result.stderr
+    assert not executable.with_suffix(".json").exists()
