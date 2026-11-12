@@ -6,7 +6,8 @@ explicit language selection: Slovak is the backward-compatible default.
 Phase 2A adds an opt-in, report-only multi-model comparison arena.
 The first Phase 2B increment adds explicit tracks with an explicit source root;
 continuity-tail checks remain deferred.
-Phase 3A adds explicit opt-in, non-secret TOML defaults; the launcher remains deferred.
+Phase 3A adds explicit opt-in, non-secret TOML defaults.
+Phase 3B adds an optional thin PowerShell launcher with generation off by default.
 Automated validation uses benign synthetic fixtures and mocked HTTP; it does
 not establish live English quality or production readiness.
 
@@ -210,7 +211,67 @@ vault_dir = 'C:\synthetic-injector-vault'
 Settings cannot select an operation mode or grant permission to transmit or
 print prose. **The direct CLI generation default is unchanged:** omitting
 `--dry-run`/`--lint-only` still enters generation. Only a separately authorized
-human may invoke that branch. No launcher or `--serve` interface is implemented.
+human may invoke that branch. The optional launcher below changes only its own
+default; no `--serve` interface is implemented.
+
+### Optional thin PowerShell launcher (Phase 3B)
+
+[writing-injector.ps1](writing-injector.ps1) uses only
+`.venv\Scripts\zafo-inject.exe` beside the script, as installed by the setup
+commands above. It does not activate environments, search `PATH`, fall back to
+another interpreter, install packages, discover settings, or set up a vault.
+PowerShell 7 is required.
+
+```powershell
+# Bare invocation: shared CLI help, without reading settings or source files.
+.\writing-injector.ps1
+
+# Default preview: --dry-run is injected; choose genuinely isolated C: storage.
+$previewArgs = @(
+    '.\tests\fixtures\frame_en.md',
+    '--language', 'en',
+    '--style-sheet', '.\tests\fixtures\STYLE_SHEET_EN.md',
+    '--vault-dir', 'C:\synthetic-injector-vault'
+)
+.\writing-injector.ps1 -CliArgs $previewArgs
+
+# Explicit local lint: no injected conflicting dry-run, no vault access.
+.\writing-injector.ps1 -CliArgs @(
+    '.\tests\fixtures\frame_en.md', '--language', 'en',
+    '--lint-only', '.\tests\fixtures\candidate_en.txt', '--strict'
+)
+```
+
+Use a PowerShell string array for `-CliArgs`, not a joined command string.
+Omitted or empty `-CliArgs @()` means help. Only a separately authorized human's
+actual `-Generate -CliArgs <string[]>` switch permits generation dispatch;
+a forwarded string such as `'-Generate'` is data, never that permission.
+`-Generate` with an omitted/empty array fails with exit 2 without starting a
+child. An array containing an empty string preserves that token rather than
+turning into bare help.
+
+Without `-Generate`, nonempty arguments receive a **prepended** `--dry-run`
+unless a complete `-h`/`--help`, `--dry-run`, or `--lint-only` option
+(including `--lint-only=FILE`) occurs before the first standalone `--`.
+Flag-shaped text inside option values or after `--` cannot suppress this
+protection. Explicit safe modes remain effective even with `-Generate`; it
+never strips them or forces generation. Conflicting modes retain the CLI's
+normal handling.
+
+`--print-output` is forwarded only when supplied; the launcher never adds it,
+and it never implies `-Generate`. It can remain in dry-run/lint-only arguments
+without printing prose. Settings cannot grant generation or printing permission.
+The wrapper does not read settings, writing inputs, credentials, addons, or
+provider data; all application processing stays in the shared CLI.
+
+Tokens, including spaces, quotes, empty values and shell metacharacters, are
+passed through .NET's argument list without expression evaluation. Relative
+paths use the caller's PowerShell filesystem location, including after
+`Set-Location`, not the launcher directory or original process directory.
+The launcher leaves that location unchanged, inherits stdout/stderr handles,
+and returns the child's exit code. Missing runtime, launch failures and a
+non-filesystem caller location produce a fixed diagnostic and exit 2.
+This interface approves neither a paid run nor real-vault access.
 
 ### Explicit tracks: first Phase 2B increment
 
@@ -570,6 +631,12 @@ Phase 3A adds typed TOML rejection/redaction, explicit-default overrides,
 model-selector group replacement, vault/credential precedence, mixed-origin
 track pairs, relative/home/literal-variable paths, help/dry-run/lint isolation,
 both-entrypoint subprocess checks, and mocked payload/report equivalence.
+Phase 3B adds native fake-executable launcher dispatch checks, exact tokens and
+separator handling, misleading flag-shaped values, caller-relative paths after
+`Set-Location`, explicit printing permission, exit propagation and runtime
+failures. Real launcher/application checks use help, default dry-run and
+lint-only only; every `-Generate` test uses the fake executable. These tests are
+in the existing subprocess file, without workflow changes.
 Choose a genuinely unsynchronized, nonredirected C: parent before validation;
 the example path alone cannot establish that property.
 
@@ -603,12 +670,21 @@ vault, and cloud overrides are removed before project Python execution.
 Existing synthetic fixtures, mocked generation, both real CLI entrypoints,
 Windows junction coverage, source immutability, and offline isolation remain
 unchanged. No application secrets, live generation, or artifact uploads are
-used. Fresh local validation collected and passed **280 tests with no skips**;
-this is an observed result, not a permanent threshold. Hosted CI is
-**unverified** in this implementation record, including clean-runner dependency
-installation. Publication and hosted execution need separate approval. Exact
-local commands, tool versions, storage cleanup, and validation limitations are
-recorded in the [project sheet](<docs/project_sheet .md>).
+used. The original local validation collected and passed **280 tests with no
+skips**; this is an observed result, not a permanent threshold. At that
+implementation checkpoint, hosted CI, including clean-runner dependency
+installation, was unverified and required separate publication approval.
+The gate subsequently merged in [#9](https://github.com/KontentWave/writing-injector/pull/9);
+its [push-to-main run](https://github.com/KontentWave/writing-injector/actions/runs/43236557834)
+passed **280 collected tests with no skips**. That historical hosted run does
+not include the Phase 3B launcher.
+
+Fresh Phase 3B local validation collected and passed **302 tests with no skips**,
+with the same Ruff selectors and strict mypy check passing. Local results do
+not establish hosted success for the launcher. Git publication was separately
+approved; merge and live acceptance remain separate approval boundaries.
+Exact commands, tool versions, storage cleanup and
+limitations are recorded in the [project sheet](<docs/project_sheet .md>).
 
 ### Human acceptance
 
