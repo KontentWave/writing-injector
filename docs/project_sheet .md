@@ -400,28 +400,113 @@ This record uses human-provided redacted terminal diagnostics and the human's qu
 
 &nbsp;
 
-## 6\. Phase 3 (Optional Backlog): Localhost Candidate Picker & Inline Diff UI
+## 6\. Phase 3: Configuration-Driven CLI (Increment A) & Deferred Human-Run Launcher
 
 ### Action
 
-Provide an optional `zafo-inject --serve` localhost-only (`127.0.0.1`) web picker to inspect lint highlights side-by-side, make quick Slovak line-edits, and export the final merged file in one click.
+Deliver explicit, non-secret run defaults through the existing shared CLI. Keep the optional thin PowerShell launcher and localhost picker deferred rather than introduce another generation pipeline.
 
-### Task (High-Level)
+### Status and Approval Boundary
 
-1. Serve a zero-dependency local HTML/CSS/JS view bound strictly to `127.0.0.1` (random ephemeral port \+ CSRF token).  
-2. Highlight `CZECHISM`, `CALQUE`, and `POV_DRIFT` spans inline with click-to-apply Slovak replacements from `SLOVAK_LEXICON.md`.  
-3. Save edited selection to `~/zafo-local/output/<stem>.merged.md`.
+- **Increment A explicitly approved and implemented locally on 2026-11-11.** Approval covers the TOML loader, shared `--config` interface, synthetic offline tests, and directly related documentation only. At that stage, this was an unpublished working-tree implementation, not Git publication or live acceptance.
+- The human approved vault precedence `CLI > ZAFO_VAULT_DIR > TOML > legacy fallback` and effective track/root pairing after merging, including mixed CLI/TOML origins. Launcher implementation was explicitly deferred.
+- That implementation approval did not authorize real-vault creation or inspection, migration, Git publication, prompt transmission, or paid generation. Assistants remain limited to benign synthetic C: test vaults and mocked HTTP.
+- **Scoped Git publication separately approved on 2026-11-12.** Approval covers the six Phase 3A configuration, test and documentation files through a feature branch, scoped commit, push, PR review/checks, merge and return to `main`. The pre-existing ignore-file edit is excluded and remains local. This changes only the Git publication boundary, not the restrictions on real-vault access, prompt transmission, live generation or deferred features.
+- The proposed per-user layout below remains uncreated, uninspected, and unvalidated by the assistant. It is not a new CLI default or automatic discovery rule. The human must privately confirm genuinely unsynchronized, nonredirected storage; neither the path string nor `LOCALAPPDATA` proves that property.
 
-### Accessibility (ARIA)
+### Configuration and Storage Contract
 
-- Semantic landmarks (`<main>`, `<section aria-labelledby="...">`), keyboard-navigable candidate selection (`role="radiogroup"`), `<mark>` annotations paired with `aria-describedby` tooltips (not color-alone), and `aria-live="polite"` save confirmations.
+```text
+%LOCALAPPDATA%\WritingInjector\
+    settings.toml        Non-secret run defaults, outside the vault
+    vault\
+        .env             Credentials
+        TIER4_ADDON.txt   Private addon
+        output\          Generated reports and drafts
+```
 
-### Test Plan
+- A human must select genuinely unsynchronized, nonredirected storage outside the workspace. The whole D: drive remains forbidden for vaults and generated output, including resolved links. An environment-derived example path is not a storage-validation exemption.
+- Keep credentials in the selected external vault's `.env`, or the existing process environment; do not introduce a credential-bearing repository `.env`. The credential file is not a general run-settings source.
+- The optional UTF-8 `.toml` file contains only allowlisted, typed defaults corresponding to existing non-secret CLI settings. It must not contain credentials, addon contents, prompt text, source prose, or draft prose. The README contains only a benign synthetic example, not personal runtime configuration.
+- Keep TOML outside the vault so offline commands can read non-secret settings without opening credentials or addons. Operation modes, `--strict`, permission for paid generation, and `--print-output` remain command-line concerns, not persisted settings. The existing direct CLI generation default is unchanged.
+- Original writing remains separate from the application vault and read-only during injection. No bulk move or automatic migration is required or permitted by this proposal. Generated reports and drafts belong exclusively in the validated selected vault's `output` directory.
 
-- Local HTTP endpoint unit tests (`127.0.0.1` binding, CSRF rejection, save handler) \+ DOM/ARIA attribute assertions.
+### Implemented Increment A
+
+1. Both entrypoints accept explicit `--config FILE`, implemented with standard-library `tomllib` in [settings.py](../src/zafo_injector/settings.py) and merged once in [cli.py](../src/zafo_injector/cli.py). No automatic discovery, settings environment variable, includes, file creation, or dependency changes were introduced.
+2. The flat allowlist is `language` (`sk|en` string), `candidates` (integer >=1), `model` (nonblank legacy single-model ID string), `models` (array of 2-3 distinct registered full ID strings, trimming surrounding whitespace), `temp` (finite number 0-2 inclusive), `min_p` (finite number 0-1 inclusive), `track` (`blog|serial|dark-romance` string), and nonblank path strings `tracks_root`, `style_sheet`, `lexicon`, `vault_dir`. Booleans are not numbers. Unknown fields/tables, duplicate TOML keys, wrong types, invalid scalar domains, or both model selectors reject even if overridden. Empty TOML retains existing defaults.
+3. Ordinary precedence is explicit CLI > TOML > existing fallback, including CLI values equal to legacy defaults. Vault precedence is explicit `--vault-dir` > existing `ZAFO_VAULT_DIR` > TOML `vault_dir` > existing home fallback. Empty-but-present vault environment values retain their legacy handling rather than falling through to TOML. Nonempty process `OPENROUTER_API_KEY` still overrides the selected vault `.env`, without mutating the environment.
+4. CLI `--model` or `--models` replaces the whole configured selector group. Both explicit CLI selectors still reject before settings access, including the exact legacy-default model object. Argparse's `--model` default remains `None` and legacy resolution stays deferred. Configured sampling counts as an override; effective matrix support/budgets, paired tracks, English lexicon rejection and matrix lint-only rejection are validated after merging.
+5. Relative `--config` and existing CLI paths use the invocation's working directory. Relative TOML paths use the selected settings file's normalized absolute pathname directory, not a linked file target's directory. TOML paths expand `~`, not `%VARIABLE%` or `$VARIABLE`; Windows drive-relative/root-relative partial paths and null characters reject. Parsing never resolves, stats, or inspects a configured vault.
+6. Help reads no settings/sources/vault, including with a missing settings file. Dry-run reads settings and consumed source resources and validates vault paths, but reads no credentials/addons, calls no HTTP and writes nothing. Lint-only retains no vault access and neither reads nor requires styles, even when configured. Settings cannot choose operation modes, source frames, output destinations, prose printing, paid permissions, or provider/request/retry controls.
+7. Missing/unreadable settings, invalid UTF-8/TOML, unsupported fields/types and invalid effective combinations exit 2 with redacted diagnostics and no fallback into generation. Existing storage 3, HTTP 4 and strict 5 exits remain unchanged.
+8. No-configuration compatibility is retained: prompts, model profiles, sampling defaults, QA bounds/scoring, strict exits, request/retry/concurrency limits, report schemas, filenames, source immutability and no-overwrite/publication behavior are unchanged. No launcher, bootstrap, vault-loader, HTTP-client, renderer or QA implementation changes are included.
+
+### Accessibility (CLI)
+
+- Preserve plain UTF-8, metadata-only diagnostics, stable exit codes, and `NO_COLOR` behavior. Configuration failures must be explicit and redacted; do not echo settings contents, credentials, or prose, or fall back into generation after an error.
+
+### Offline Validation (2026-11-11)
+
+- A focused contract test first failed on the unsupported `--config` flag before implementation.
+- The combined targeted manual gate passed **655 tests in 108.20 seconds**: settings contracts, both CLI entrypoints, vault configuration, tracks, renderer/publication, English QA, arena behavior/client limits, model profiles and Slovak lint. This was not a full-suite or hosted-CI run.
+- After strengthening populated-TOML matrix payload/report equivalence against equivalent CLI runs, the final settings-only confirmation passed **82 tests in 4.08 seconds**. This overlaps the combined gate; counts must not be added.
+- Tests cover malformed/unknown/forbidden settings, exact types and sampling boundaries, redacted parser/file failures, explicit-default overrides, whole-selector replacement, effective combinations and mixed-origin tracks, environment/credential precedence, relative/home/literal-variable paths, and source/report byte equivalence. Help/dry-run preserve no credential/addon reads, HTTP or writes; lint-only blocks configured-vault resolution/stat/loading and ignores styles.
+- Ruff lint/format checks passed for all four changed Python files; strict mypy passed for all **13** source files. Final syntax parsing passed for all four changed Python files without bytecode writes.
+- All temporary test storage, `TEMP`/`TMP`, synthetic vaults and type caches used fresh validated assistant-owned C: storage; bytecode and pytest/linter caches were disabled. Existing storage/link, source hash/BOM/CRLF, strict/scoring, no-overwrite and publication rollback regressions passed. Generation tests used mocked HTTP; no live generation, private-vault access, dependency installation or Git publication occurred.
+- Offline checks establish neither prose quality nor paid-provider/production acceptance. A launcher generation-dispatch test is not part of this increment because no launcher was implemented.
+
+### Bounded Offline Hardening (2026-11-12)
+
+- Scoped local metadata matched `main` at `16ac0be9e8c888e2378546be03d2911839cf94b2` (the PR #7 merge baseline). Existing tracked edits and both untracked Phase 3A Python files were included and preserved; the earlier ignore-file and documentation changes were not reverted. Nothing was staged or published.
+- On CPython **3.12.4**, a real synthetic TOML file containing **2,000 nested arrays** reproduced an uncaught `RecursionError`, despite a valid explicit CLI `--model` override. The smallest new regression failed before the correction (**1 failed in 0.21 seconds**) and passed afterward (**1 passed in 0.20 seconds**).
+- The only production correction adds `RecursionError` alongside `ValueError` at the TOML-loading boundary. It raises the existing generic, redacted `ConfigurationError` with `from None`; no CLI merge, path-normalization, vault, HTTP, renderer, dependency or QA behavior was changed.
+- Parser coverage blocks source-resource selection/reads, vault loading, HTTP construction and both renderers before rejection. Four additional subprocess variants (module/console, Slovak/English) verify actual exit **2**, no traceback or settings sentinel disclosure, unchanged sources and no output, including with the explicit selector override.
+- The linked-settings regression successfully created an assistant-owned **C: Windows junction**. Distinct valid styles beside the selected pathname and linked target prove, through the actual mocked request's assembled messages, that relative resources use the normalized selected-pathname directory. The junction was removed in `finally`; this contract was exercised, not skipped.
+- The existing dry-run test now guards actual `builtins.open`, `io.open` and `os.open` calls for the synthetic vault's `.env` and `TIER4_ADDON.txt`, including binary opens, while permitting settings/source reads. Existing no-HTTP, no-render, no-output and source-hash assertions remain; lint-only vault/style isolation remains intact.
+- The fresh combined settings/subprocess gate passed **280 tests in 75.72 seconds, with no skips**. This includes the smallest regression; neither preliminary results nor the historical **655** and overlapping **82** test runs above are added to this count. No full-suite or hosted-CI run was performed.
+- Final no-cache Ruff lint and format checks passed for all four Phase 3A Python files. The initial format check requested two new test-hunk formatting changes, which Ruff applied. Existing strict mypy passed for all **13** source files. Pylance syntax calls were unavailable because the service timed out; protected local `ast.parse` validation with Python 3.12 grammar passed for the same four files instead.
+- Before Python execution, bytecode and pytest/linter caches were disabled; `TEMP`, `TMP`, pytest base directories and the mypy cache used fresh, nonredirected, assistant-owned C: storage that passed the existing storage validator. Subprocesses inherited these protections. All four identified test/cache subdirectories, their empty task root and the scoped-diff tool scratch file were removed, with absence verified and without following links.
+- This evidence covers CPython 3.12.4 and the Windows junction case, not every supported interpreter/link variant or live provider behavior. No dependencies were installed/upgraded, no real vault or personal settings were inspected, and no live request, launcher work or Git publication occurred.
+
+The exact targeted runner/check commands were as follows. `$root` denotes the fresh validated C: task directory, now removed. These processes used `PYTHONDONTWRITEBYTECODE=1`, `RUFF_NO_CACHE=1`, `TEMP=$root`, `TMP=$root`, and `MYPY_CACHE_DIR=$root\mypy-cache`; pytest runners also used `PYTEST_ADDOPTS=-p no:cacheprovider`. Runtime, pytest and mypy wrappers removed private vault/key/cloud environment overrides from their process without reading the values.
+
+```powershell
+# Before the correction: expected failure; after the correction: pass.
+.\.venv\Scripts\python.exe -B -m pytest -q --tb=line -p no:cacheprovider --basetemp "$root\pytest-repro" tests\unit\test_settings.py::test_recursive_settings_reject_before_consumption_even_with_cli_selector_override
+.\.venv\Scripts\python.exe -B -m pytest -q --tb=line -p no:cacheprovider --basetemp "$root\pytest-fixed" tests\unit\test_settings.py::test_recursive_settings_reject_before_consumption_even_with_cli_selector_override
+.\.venv\Scripts\python.exe -B -m pytest -q -rs --tb=short -p no:cacheprovider --basetemp "$root\pytest-targeted" tests\unit\test_settings.py tests\unit\test_cli_subprocess.py
+.\.venv\Scripts\ruff.exe format --no-cache tests\unit\test_settings.py tests\unit\test_cli_subprocess.py
+.\.venv\Scripts\ruff.exe check --no-cache src\zafo_injector\settings.py src\zafo_injector\cli.py tests\unit\test_settings.py tests\unit\test_cli_subprocess.py
+.\.venv\Scripts\ruff.exe format --check --no-cache src\zafo_injector\settings.py src\zafo_injector\cli.py tests\unit\test_settings.py tests\unit\test_cli_subprocess.py
+.\.venv\Scripts\python.exe -B -m mypy --strict --cache-dir "$root\mypy-cache" src
+$code = @'
+import ast
+from pathlib import Path
+
+paths = (
+    Path(r"src\zafo_injector\settings.py"),
+    Path(r"src\zafo_injector\cli.py"),
+    Path(r"tests\unit\test_settings.py"),
+    Path(r"tests\unit\test_cli_subprocess.py"),
+)
+for path in paths:
+    ast.parse(path.read_text(encoding="utf-8"), filename=str(path), feature_version=(3, 12))
+print("AST syntax validation passed for all four Phase 3A Python files.")
+'@
+.\.venv\Scripts\python.exe -B -c $code
+```
 
 ### Perf / Security Notes
 
-- Reject non-loopback `Host` headers; zero external CDN assets or telemetry calls (100% offline localhost rendering).
+- No assistant access to real vaults, credentials, addons, reports, candidates, or upstream prose, including any vault override. No automatic setup, file moves, deletion, or cleanup of human evidence.
+- Storage isolation is not a network air gap. A separately approved human live invocation sends assembled prompt content to OpenRouter; configuration or a launcher does not add a dollar cap or change existing retry/cost exposure.
+
+### Deferred Work
+
+- The optional thin `writing-injector.ps1` launcher requires separate implementation approval. The planning interface is bare help, otherwise injected dry-run, with only explicit human `-Generate -CliArgs <string[]>` permitting generation dispatch and explicitly forwarded `--print-output` permitting prose printing. Settings cannot enable either action. A future launcher must forward token arrays without expression evaluation, preserve caller-relative paths and child exit codes, and test paid-dispatch branches only with a fake executable. No human paid invocation is approved by this planning interface.
+- The localhost candidate picker and inline diff/editor remain a later optional backlog, not part of this configuration increment. No `--serve` implementation is approved.
+- If revisited, retain loopback-only `127.0.0.1` binding, an ephemeral port, CSRF protection, non-loopback `Host` rejection, no external assets/telemetry, keyboard-accessible semantic candidate selection and annotations, and accessible save confirmations. Edited exports must use the validated selected vault's `output`, not a hard-coded home path.
+- Continuity-tail work and automatic translation remain unapproved. The human workflow remains English drafting followed by manual Slovak translation and editing; this proposal does not authorize more paid Slovak smokes.
 
 <!-- PHASE_3_END -->

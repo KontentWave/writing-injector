@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import TextIO
@@ -22,9 +23,8 @@ from .openrouter_client import OpenRouterClient, OpenRouterError
 from .parser import SlotParseError, parse_frame
 from .prompt_builder import build_messages
 from .renderer import QA_LIMITATIONS, OutputError, rank_candidates, render_arena, render_outputs
+from .settings import TRACKS, RunSettings
 from .slovak_lint import LexiconRules, lint_candidate
-
-_TRACKS = ("blog", "serial", "dark-romance")
 
 
 def _utf8(stream: TextIO) -> None:
@@ -68,7 +68,7 @@ def _resource_paths(
         )
     if tracks_root is None:
         raise ConfigurationError("--track and --tracks-root must be supplied together.")
-    if track not in _TRACKS:
+    if track not in TRACKS:
         raise ConfigurationError("Track must be blog, serial, or dark-romance.")
     root = tracks_root.expanduser().resolve(strict=True)
     if not root.is_dir():
@@ -112,11 +112,15 @@ def _arguments() -> argparse.ArgumentParser:
     )
     parser.add_argument("post_path", type=Path)
     parser.add_argument(
-        "--language", choices=("sk", "en"), default="sk", help="Output language (default: sk)."
+        "--config",
+        type=Path,
+        metavar="FILE",
+        help="Explicit non-secret TOML defaults outside the vault; never loaded automatically.",
     )
+    parser.add_argument("--language", choices=("sk", "en"), help="Output language (default: sk).")
     parser.add_argument(
         "--track",
-        choices=_TRACKS,
+        choices=TRACKS,
         help="Explicit track; requires --tracks-root. Never inferred from source paths or prose.",
     )
     parser.add_argument(
@@ -124,7 +128,7 @@ def _arguments() -> argparse.ArgumentParser:
         type=Path,
         help="Explicit root containing track directories; requires --track.",
     )
-    parser.add_argument("--candidates", type=_positive, default=3)
+    parser.add_argument("--candidates", type=_positive, help="Candidates per model (default: 3).")
     models = parser.add_mutually_exclusive_group()
     models.add_argument("--model", help=f"Single-model ID (default: {ModelParams().model}).")
     models.add_argument(
@@ -153,6 +157,20 @@ def main(argv: list[str] | None = None) -> int:
     args = _arguments().parse_args(argv)
     workspace = Path(__file__).resolve().parents[2]
     try:
+        run_settings = RunSettings.load(args.config) if args.config is not None else RunSettings()
+        args.language = (
+            args.language if args.language is not None else run_settings.language or "sk"
+        )
+        args.candidates = (
+            args.candidates if args.candidates is not None else run_settings.candidates or 3
+        )
+        for name in ("track", "tracks_root", "temp", "min_p", "style_sheet", "lexicon"):
+            if getattr(args, name) is None:
+                setattr(args, name, getattr(run_settings, name))
+        if args.model is None and args.models is None:
+            args.model, args.models = run_settings.model, run_settings.models
+        if args.vault_dir is None and "ZAFO_VAULT_DIR" not in os.environ:
+            args.vault_dir = run_settings.vault_dir
         language: Language = args.language
         if language == "en" and args.lexicon is not None:
             raise ConfigurationError("--lexicon is Slovak-only; omit it with --language en.")

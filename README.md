@@ -6,6 +6,7 @@ explicit language selection: Slovak is the backward-compatible default.
 Phase 2A adds an opt-in, report-only multi-model comparison arena.
 The first Phase 2B increment adds explicit tracks with an explicit source root;
 continuity-tail checks remain deferred.
+Phase 3A adds explicit opt-in, non-secret TOML defaults; the launcher remains deferred.
 Automated validation uses benign synthetic fixtures and mocked HTTP; it does
 not establish live English quality or production readiness.
 
@@ -88,18 +89,20 @@ Default generation requests 3 candidates with up to 3 concurrent requests,
 HTTP 429/5xx. Total run time can exceed 45 seconds. Latency and cost depend on
 the provider and are not guaranteed.
 
-`--language sk|en` selects the output language; omission means `sk`. Language
+`--language sk|en` selects the output language; without configuration, omission
+means `sk`. Language
 is never auto-detected from prose, headers, filenames, or style sheets.
 Both entrypoints support the same flags and behavior.
 
 Other flags: `--candidates`, `--model`, `--models`, `--temp`, `--min-p`, `--vault-dir`,
-`--style-sheet`, `--lexicon`, `--track`, `--tracks-root`, `--strict`, and `--print-output`.
-With neither track flag, style paths still default to the frame's neighboring
+`--style-sheet`, `--lexicon`, `--track`, `--tracks-root`, `--config`, `--strict`,
+and `--print-output`.
+With neither effective track setting, style paths still default to the frame's neighboring
 `blog\docs\STYLE_SHEET.md`
 (`post_path.parent.parent / "docs"`). Slovak mode also defaults to its neighboring
 `SLOVAK_LEXICON.md`. English mode neither requires nor reads that lexicon.
 An explicitly supplied `--lexicon` with `--language en` is rejected with exit 2
-before file or vault access; it is not silently ignored or treated as an English
+before source or vault access; it is not silently ignored or treated as an English
 dictionary. Slovak `--lexicon` behavior is unchanged.
 
 The existing bootstrapper remains Slovak-lexicon based. For an English-only
@@ -115,14 +118,109 @@ identify the candidate, including before a strict failure exits without drafts.
 Terminal messages are UTF-8, plain text, and never ANSI colored, including when
 `NO_COLOR` is set.
 
+### Explicit non-secret configuration (Phase 3A)
+
+Both entrypoints accept `--config FILE` for one explicitly selected UTF-8 `.toml`
+file. There is no automatic settings-file loading, configuration environment
+variable, ancestor search, include, or file creation. Without `--config`, existing
+fallback behavior is unchanged.
+
+Keep settings outside the vault. A human may choose
+`%LOCALAPPDATA%\WritingInjector\settings.toml`, but this is not a discovery rule
+or proof of genuinely unsynchronized, nonredirected storage. No personal settings
+file or vault is created or inspected by this implementation.
+
+The document is flat and every field is optional:
+
+| Key | TOML type and constraints |
+|---|---|
+| `language` | String: exactly `sk` or `en` |
+| `candidates` | Integer >=1, not a boolean; existing matrix request budgets still apply |
+| `model` | Nonblank single-model ID string; existing legacy ID behavior is retained |
+| `models` | Array of 2-3 distinct registered full ID strings; surrounding whitespace is trimmed |
+| `temp` | Finite integer/float in inclusive range 0-2, not a boolean |
+| `min_p` | Finite integer/float in inclusive range 0-1, not a boolean |
+| `track` | String: `blog`, `serial`, or `dark-romance` |
+| `tracks_root`, `style_sheet`, `lexicon`, `vault_dir` | Nonblank path strings |
+
+Unknown fields/tables, duplicate TOML keys, wrong types, invalid scalar domains,
+and a document containing both `model` and `models` fail with exit 2, even if CLI
+values would override them. An empty document preserves existing defaults.
+Credentials, addon/prompt/source/draft contents, the positional frame, output
+destinations, operation modes, `strict`, `print_output`, generation permissions,
+and request/provider/retry controls are not supported settings.
+
+**Precedence and merging**
+
+- Ordinary defaults: explicit CLI value > TOML value > existing fallback.
+  An explicitly supplied value equal to a legacy default still overrides TOML.
+- Vault: `--vault-dir` > existing `ZAFO_VAULT_DIR` > TOML `vault_dir` >
+  existing home fallback. An empty-but-present `ZAFO_VAULT_DIR` retains its
+  existing handling; it does not fall through to TOML.
+- Credentials: nonempty process `OPENROUTER_API_KEY` > selected vault `.env`.
+  Settings never supply credentials or mutate the process environment.
+- A CLI `--model` or `--models` replaces the entire configured selector group.
+  Both explicit CLI selectors still reject, including the exact legacy default.
+  Argparse's `--model` default remains `None`; legacy ID resolution is deferred.
+- Configured sampling values are overrides, not profile defaults. An effective
+  `min_p` still rejects a matrix containing a model without support; it is never
+  silently discarded. Effective matrix budgets are checked after merging.
+- The effective `track`/`tracks_root` pair is required after merging. Values may
+  come from different explicit origins, such as a configured root plus CLI track.
+  No track, source root, or language is inferred.
+- An effective lexicon override is rejected with English, including when
+  inherited from TOML. `--models` with `--lint-only` remains invalid.
+
+**Path rules and offline modes**
+
+Relative `--config` and existing CLI paths use the invocation's working
+directory. Relative TOML paths use the selected settings file's normalized
+absolute pathname directory, not the target directory of a linked settings
+file. TOML paths expand `~`, but do not expand `%VARIABLE%` or `$VARIABLE`.
+Windows paths must be fully qualified or ordinary relative paths; ambiguous
+forms such as `C:folder` and `\folder`, blank paths, and null characters reject.
+Configuration parsing does not resolve, stat, or inspect a configured vault.
+Existing storage/link validation applies only when the vault is consumed.
+
+- Help exits without reading settings, sources, credentials, or addons, including
+  when the selected settings file does not exist.
+- Dry-run reads settings and consumed source resources and validates vault paths,
+  but reads no credentials/addons, calls no HTTP, and writes nothing.
+- Lint-only reads settings and consumed lint inputs, but never accesses the vault
+  or reads/requires styles, even when those paths occur in settings.
+- Missing/unreadable files, invalid UTF-8/TOML, and invalid settings exit 2 with
+  redacted diagnostics rather than raw decoder messages, values, or traceback.
+  Existing storage (3), HTTP (4), and strict-lint (5) exits remain unchanged.
+
+For a separately prepared **benign synthetic** track tree and settings file:
+
+```toml
+language = "en"
+candidates = 1
+track = "serial"
+tracks_root = 'C:\synthetic-tracks'
+vault_dir = 'C:\synthetic-injector-vault'
+```
+
+```powershell
+.\.venv\Scripts\python.exe -m zafo_injector C:\synthetic-tracks\serial\episodes\frame_en.md --config C:\synthetic-settings\settings.toml --dry-run
+.\.venv\Scripts\zafo-inject.exe C:\synthetic-tracks\serial\episodes\frame_en.md --config C:\synthetic-settings\settings.toml --lint-only .\tests\fixtures\candidate_en.txt --strict
+```
+
+Settings cannot select an operation mode or grant permission to transmit or
+print prose. **The direct CLI generation default is unchanged:** omitting
+`--dry-run`/`--lint-only` still enters generation. Only a separately authorized
+human may invoke that branch. No launcher or `--serve` interface is implemented.
+
 ### Explicit tracks: first Phase 2B increment
 
 Both entrypoints accept `--track blog|serial|dark-romance` together with
-`--tracks-root ROOT`. Both flags are required when either is supplied. `ROOT`
+`--tracks-root ROOT`. Without configuration, both flags are required when either
+is supplied; with `--config`, the effective pair is required after merging. `ROOT`
 explicitly identifies the directory containing the track directories; there is
 no environment default, ancestor search, or inference from paths, filenames,
-headers, or prose. Relative roots and resource overrides resolve from the
-current working directory.
+headers, or prose. Relative CLI roots and resource overrides resolve from the
+current working directory; TOML paths follow the configuration rules above.
 
 The supported layout below is a **benign synthetic contract**, not a claim about
 real upstream storage:
@@ -437,7 +535,10 @@ Slovak lexicon rules on an English document rather than silently ignoring them.
 ```powershell
 # Fresh local C: test storage, outside D:, the workspace, and cloud locations.
 $safeTests = Join-Path $env:LOCALAPPDATA ("Temp\zafo-tests-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $safeTests -ErrorAction Stop | Out-Null
 $env:PYTHONDONTWRITEBYTECODE = '1'
+$env:TEMP = $safeTests
+$env:TMP = $safeTests
 $env:MYPY_CACHE_DIR = Join-Path $safeTests 'mypy-cache'
 .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp (Join-Path $safeTests 'pytest')
 .\.venv\Scripts\ruff.exe check --no-cache src tests
@@ -465,6 +566,12 @@ The first Phase 2B increment adds synthetic nested track trees, per-language
 resource/default/override checks, missing/invalid inputs, Windows junction
 rejection, both-entrypoint offline checks, mocked single/matrix generation,
 unchanged version-1 reports and BOM/CRLF/source-immutability coverage.
+Phase 3A adds typed TOML rejection/redaction, explicit-default overrides,
+model-selector group replacement, vault/credential precedence, mixed-origin
+track pairs, relative/home/literal-variable paths, help/dry-run/lint isolation,
+both-entrypoint subprocess checks, and mocked payload/report equivalence.
+Choose a genuinely unsynchronized, nonredirected C: parent before validation;
+the example path alone cannot establish that property.
 
 Fresh manual offline gate on 2026-11-07: the clean Phase 1 baseline passed 290
 tests; the completed Phase 2A suite passed **519 tests**, Ruff lint/format passed
