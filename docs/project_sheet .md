@@ -411,7 +411,7 @@ Deliver explicit, non-secret run defaults through the existing shared CLI. Keep 
 - **Increment A explicitly approved and implemented locally on 2026-11-11.** Approval covers the TOML loader, shared `--config` interface, synthetic offline tests, and directly related documentation only. At that stage, this was an unpublished working-tree implementation, not Git publication or live acceptance.
 - The human approved vault precedence `CLI > ZAFO_VAULT_DIR > TOML > legacy fallback` and effective track/root pairing after merging, including mixed CLI/TOML origins. Launcher implementation was explicitly deferred.
 - That implementation approval did not authorize real-vault creation or inspection, migration, Git publication, prompt transmission, or paid generation. Assistants remain limited to benign synthetic C: test vaults and mocked HTTP.
-- **Scoped Git publication separately approved on 2026-11-12.** Approval covers the six Phase 3A configuration, test and documentation files through a feature branch, scoped commit, push, PR review/checks, merge and return to `main`. The pre-existing ignore-file edit is excluded and remains local. This changes only the Git publication boundary, not the restrictions on real-vault access, prompt transmission, live generation or deferred features.
+- **Scoped Git publication separately approved on 2026-11-12.** Approval covers the six Phase 3A configuration, test and documentation files through a feature branch, scoped commit, push, PR review/checks, merge and return to `main`. The pre-existing ignore-file edit was excluded and remained local at that stage; its subsequent rollback was verified during the CI-gate work below. This changes only the Git publication boundary, not the restrictions on real-vault access, prompt transmission, live generation or deferred features.
 - The proposed per-user layout below remains uncreated, uninspected, and unvalidated by the assistant. It is not a new CLI default or automatic discovery rule. The human must privately confirm genuinely unsynchronized, nonredirected storage; neither the path string nor `LOCALAPPDATA` proves that property.
 
 ### Configuration and Storage Contract
@@ -495,6 +495,40 @@ for path in paths:
 print("AST syntax validation passed for all four Phase 3A Python files.")
 '@
 .\.venv\Scripts\python.exe -B -c $code
+```
+
+### Bounded Windows Offline CI Gate (2026-11-12; Local, Unpublished)
+
+- Baseline verification found a clean `main`, with local HEAD, `origin/main`, and GitHub `main` all at `cba3012ff7999ef9f32b3464633da3b4d22db458`. PR #8 was merged with exactly the six approved Phase 3A files; GitHub reported zero workflows. The reported subsequent ignore-file rollback was verified: no staged or unstaged ignore-file change existed, and none was reinstated.
+- Implementation approval covered one [workflow](../.github/workflows/windows-offline.yml), directly related README/project-sheet updates, offline validation and the new local branch `ci/bounded-windows-offline-gate`. It did not authorize staging, committing, pushing, PR creation, hosted workflow execution, production-code changes, dependency upgrades or launcher work. Nothing was staged or published.
+- The workflow uses GitHub-hosted `windows-2022`, Python 3.12, pull requests and pushes to `main`, `contents: read`, and a ten-minute timeout. Its single pytest invocation combines settings/subprocess coverage and rejects unexpected skips without hard-coding a test count. Ruff lint/format checks cover only the four Phase 3A Python files; existing strict mypy checks `src`. There is no full-suite/version matrix, `pull_request_target`, application-secret use or artifact upload.
+- **Narrow platform exception explicitly approved before implementation:** GitHub-managed checkout/action/runtime/control infrastructure may use D:, including inline scripts and runner environment files. GitHub documents non-static runner paths; its runner writes inline scripts before executing project steps. `RUNNER_TEMP` is not assumed to be on C:. This exception includes action-managed Python runtime bootstrap, not project build/install/test/cache storage, and does not change application storage validation. See [GitHub runner filesystems](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#file-systems) and [runner script handling](https://github.com/actions/runner/blob/main/src/Runner.Worker/Handlers/ScriptHandler.cs).
+- Preparation creates an unredirected GUID-named C: root and exports committed public `HEAD` with `git archive`; ignored/local/private content is never recursively copied. Builds and egg-info stay in the C: source copy. A separate C: test area passes the existing `validate_storage_path` check before project installation or tests. The selected CI interpreter must be on C: and version 3.12. Declared `.[dev]` dependencies install into that test area's disposable virtual environment, placing the real console executable beside its Python executable.
+- Before interpreter setup, PowerShell guards against redirected storage ancestors and exports C: `TEMP`, `TMP`, `TMPDIR`, bytecode/cache locations and a disabled pip configuration. Bytecode writes and pytest/Ruff caches are disabled. The project step removes credential/vault/cloud overrides without printing values; subprocesses inherit the protections. Existing synthetic Tier-1 fixtures, mocked HTTP, offline-mode guards, source hashes/BOM/CRLF and junction assertions are unchanged.
+- Fresh local validation used the committed public C: source export and a separate validated C: test area. The existing read-only local virtual environment supplied CPython **3.12.4**, pytest **9.2.0**, Ruff **0.17.3** and mypy **2.4.1**; nothing was installed or upgraded locally. Pytest collected **280** tests and passed **280 in 184.00 seconds, with no skips**. Both module/console entrypoints and the Windows junction regression were exercised. Ruff lint and format passed for all four selected files; strict mypy passed for all **13** source files. These counts are fresh observations, not required constants or additions to historical results.
+- PowerShell **7.6.10** parsed both inline workflow blocks successfully. Local trigger/permission/scope assertions passed; an initial CRLF-sensitive assertion was corrected in the temporary validation harness without changing the workflow. The exact preparation block and exact Python storage preflight also executed successfully. Pylance reported no syntax errors for the storage snippet, and VS Code reported no workflow diagnostics. No standalone YAML/Actions validator was available in the existing environment; none was installed. These checks do not establish full hosted Actions validation.
+- **Hosted CI remains unverified.** No workflow was triggered. Action resolution, runner-managed D: infrastructure, hosted Python provisioning and clean dependency/virtual-environment installation were not exercised locally. The local console tests used the existing installed entrypoint; the new hosted installation path still requires an observed hosted run after separate publication approval.
+- Both specifically identified assistant-owned C: roots, their public source archives/copies, synthetic test vaults/outputs, type cache and temporary runner-environment file were removed, with absence verified. Cleanup removed links as links without descending into them. Original source/configuration/test files, dependencies and the ignore file remained unchanged. No real vault or personal application settings were inspected, and no live generation occurred.
+
+The targeted local commands below ran from the committed C: source export. `$root` denotes the now-removed local task root; `$area` was its separately validated `test-area`. All Python processes used `PYTHONDONTWRITEBYTECODE=1`, `PYTHONIOENCODING=utf-8`, `TEMP=$area`, `TMP=$area`, `TMPDIR=$area`, `PYTHONPYCACHEPREFIX=$area\bytecode`, `PYTEST_ADDOPTS=-p no:cacheprovider`, `RUFF_NO_CACHE=1`, `NO_COLOR=1` and `MYPY_CACHE_DIR=$area\mypy-cache`. Wrappers removed `OPENROUTER_API_KEY`, `ZAFO_VAULT_DIR`, `GOOGLE_DRIVE_DIR`, `PYTHONPATH`, `PYTHONHOME` and `PYTEST_PLUGINS` from their own environments without printing values.
+
+```powershell
+$python = 'D:\zafo-injector\.venv\Scripts\python.exe'
+$area = Join-Path $root 'test-area'
+Set-Location -LiteralPath (Join-Path $root 'source')
+$files = @(
+    'src\zafo_injector\settings.py',
+    'src\zafo_injector\cli.py',
+    'tests\unit\test_settings.py',
+    'tests\unit\test_cli_subprocess.py'
+)
+& $python -B -m pytest -rs --tb=short -p no:cacheprovider --basetemp "$area\pytest" tests\unit\test_settings.py tests\unit\test_cli_subprocess.py |
+    Tee-Object -Variable pytestOutput
+if ($LASTEXITCODE -ne 0) { throw 'Targeted offline tests failed.' }
+if ($pytestOutput -match '\bskipped\b') { throw 'Unexpected skipped coverage in the Windows gate.' }
+& $python -B -m ruff check --no-cache @files
+& $python -B -m ruff format --check --no-cache @files
+& $python -B -m mypy --strict --cache-dir $env:MYPY_CACHE_DIR src
 ```
 
 ### Perf / Security Notes

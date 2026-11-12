@@ -579,6 +579,37 @@ tests; the completed Phase 2A suite passed **519 tests**, Ruff lint/format passe
 synthetic/mocked checks, not hosted CI, live model acceptance, or production
 readiness evidence.
 
+### Bounded Windows offline gate
+
+The [Windows workflow](.github/workflows/windows-offline.yml) targets pull
+requests and pushes to `main`, using GitHub-hosted `windows-2022`, Python 3.12,
+`contents: read`, and a ten-minute job timeout. It runs only the settings and
+subprocess test files together, no-cache Ruff lint/format checks for those tests
+and their two Phase 3A source files, and strict mypy against `src`. Unexpected
+skips fail the gate; there is no fixed required test count or full-suite matrix.
+
+The explicitly approved infrastructure exception permits GitHub-managed
+checkout/action/runtime/control files on D:, including runner temporary scripts.
+It does **not** permit project-controlled build, dependency-installation,
+temporary, test-vault, output, bytecode, or cache storage there. The workflow
+exports only committed public repository content to a fresh C: source copy,
+never recursively copies a local workspace, and uses a separate C: test area
+checked by the unchanged storage validator. Declared `.[dev]` dependencies are
+installed in a disposable C: virtual environment so `zafo-inject.exe` is beside
+the selected Python executable. Bytecode writes and pytest/Ruff caches are
+disabled; temporary/type-cache paths stay on C:, and application credential,
+vault, and cloud overrides are removed before project Python execution.
+
+Existing synthetic fixtures, mocked generation, both real CLI entrypoints,
+Windows junction coverage, source immutability, and offline isolation remain
+unchanged. No application secrets, live generation, or artifact uploads are
+used. Fresh local validation collected and passed **280 tests with no skips**;
+this is an observed result, not a permanent threshold. Hosted CI is
+**unverified** in this implementation record, including clean-runner dependency
+installation. Publication and hosted execution need separate approval. Exact
+local commands, tool versions, storage cleanup, and validation limitations are
+recorded in the [project sheet](<docs/project_sheet .md>).
+
 ### Human acceptance
 
 The synthetic [style fixture](tests/fixtures/STYLE_SHEET.md) requests natural,
