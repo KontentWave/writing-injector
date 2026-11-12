@@ -1,0 +1,123 @@
+name: Bounded Windows offline gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONIOENCODING: utf-8
+      PYTEST_ADDOPTS: -p no:cacheprovider
+      RUFF_NO_CACHE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      NO_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Prepare disposable C storage
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Only GitHub-managed checkout/action/runtime/control files may use D:.
+          $root = Join-Path 'C:\' ('zafo-ci-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $root | Out-Null
+          for ($directory = Get-Item -LiteralPath $root -Force; $null -ne $directory; $directory = $directory.Parent) {
+            if ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+              throw 'CI storage must not have redirected ancestors.'
+            }
+          }
+          $source = Join-Path $root 'source'
+          $area = Join-Path $root 'test-area'
+          New-Item -ItemType Directory -Path $source, $area | Out-Null
+          @{
+            CI_SOURCE = $source
+            CI_TEST_AREA = $area
+            TEMP = $area
+            TMP = $area
+            TMPDIR = $area
+            MYPY_CACHE_DIR = Join-Path $area 'mypy-cache'
+            RUFF_CACHE_DIR = Join-Path $area 'ruff-cache'
+            PIP_CACHE_DIR = Join-Path $area 'pip-cache'
+            PYTHONPYCACHEPREFIX = Join-Path $area 'bytecode'
+            PIP_CONFIG_FILE = 'NUL'
+          }.GetEnumerator() | ForEach-Object {
+            "$($_.Key)=$($_.Value)"
+          } | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          git -C $env:GITHUB_WORKSPACE archive --format=tar --output "$root\source.tar" HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Committed source export failed.' }
+          tar -xf "$root\source.tar" -C $source
+          if ($LASTEXITCODE -ne 0) { throw 'Committed source extraction failed.' }
+
+      - uses: actions/setup-python@v5
+        env:
+          AGENT_TOOLSDIRECTORY: C:\hostedtoolcache\windows
+        with:
+          python-version: "3.12"
+
+      - name: Validate storage and run the bounded offline gate
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($name in @('OPENROUTER_API_KEY', 'ZAFO_VAULT_DIR', 'GOOGLE_DRIVE_DIR', 'PYTHONPATH', 'PYTHONHOME', 'PYTEST_PLUGINS')) {
+            if (Test-Path -LiteralPath "Env:\$name") {
+              Remove-Item -LiteralPath "Env:\$name"
+            }
+          }
+          $storageCheck = @'
+          import sys
+          from pathlib import Path
+
+          source = Path(sys.argv[1])
+          area = Path(sys.argv[2])
+          sys.path.insert(0, str(source / "src"))
+          from zafo_injector.config import validate_storage_path
+
+          if sys.version_info[:2] != (3, 12):
+              raise SystemExit("Python 3.12 is required.")
+          if Path(sys.executable).resolve().drive.casefold() != "c:":
+              raise SystemExit("The CI interpreter must be installed on C:.")
+          if source.drive.casefold() != "c:" or source.resolve() != source.absolute():
+              raise SystemExit("The CI source copy must be unredirected C: storage.")
+          if area.drive.casefold() != "c:" or validate_storage_path(area, source) != area:
+              raise SystemExit("The CI test area must be isolated, unredirected C: storage.")
+          print(f"CPython {sys.version.split()[0]}; isolated C: test storage validated.")
+          '@
+          python -B -c $storageCheck $env:CI_SOURCE $env:CI_TEST_AREA
+          if ($LASTEXITCODE -ne 0) { throw 'CI storage validation failed.' }
+          Set-Location -LiteralPath $env:CI_SOURCE
+          python -B -m venv "$env:CI_TEST_AREA\venv"
+          if ($LASTEXITCODE -ne 0) { throw 'CI virtual environment creation failed.' }
+          $python = Join-Path $env:CI_TEST_AREA 'venv\Scripts\python.exe'
+          & $python -B -m pip install --no-cache-dir --no-compile '.[dev]'
+          if ($LASTEXITCODE -ne 0) { throw 'Declared dependency installation failed.' }
+          foreach ($tool in @('pytest', 'ruff', 'mypy')) {
+            & $python -B -m $tool --version
+            if ($LASTEXITCODE -ne 0) { throw "Cannot run $tool." }
+          }
+          & $python -B -m pytest -rs --tb=short -p no:cacheprovider --basetemp "$env:CI_TEST_AREA\pytest" tests\unit\test_settings.py tests\unit\test_cli_subprocess.py |
+            Tee-Object -Variable pytestOutput
+          if ($LASTEXITCODE -ne 0) { throw 'Targeted offline tests failed.' }
+          if ($pytestOutput -match '\bskipped\b') { throw 'Unexpected skipped coverage in the Windows gate.' }
+          $files = @(
+            'src\zafo_injector\settings.py',
+            'src\zafo_injector\cli.py',
+            'tests\unit\test_settings.py',
+            'tests\unit\test_cli_subprocess.py'
+          )
+          & $python -B -m ruff check --no-cache @files
+          if ($LASTEXITCODE -ne 0) { throw 'Ruff lint failed.' }
+          & $python -B -m ruff format --check --no-cache @files
+          if ($LASTEXITCODE -ne 0) { throw 'Ruff format check failed.' }
+          & $python -B -m mypy --strict --cache-dir $env:MYPY_CACHE_DIR src
+          if ($LASTEXITCODE -ne 0) { throw 'Strict mypy failed.' }
