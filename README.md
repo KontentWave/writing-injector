@@ -680,11 +680,40 @@ passed **280 collected tests with no skips**. That historical hosted run does
 not include the Phase 3B launcher.
 
 Fresh Phase 3B local validation collected and passed **302 tests with no skips**,
-with the same Ruff selectors and strict mypy check passing. Local results do
-not establish hosted success for the launcher. Git publication was separately
-approved; merge and live acceptance remain separate approval boundaries.
+with the same Ruff selectors and strict mypy check passing. At that
+pre-publication checkpoint, local results did not establish hosted launcher
+success; publication and merge were subsequently completed as recorded below.
 Exact commands, tool versions, storage cleanup and
 limitations are recorded in the [project sheet](<docs/project_sheet .md>).
+
+### Phase 3 post-merge checkpoint (2026-11-12)
+
+Implementation, publication, merge and automated offline validation are complete.
+[#10](https://github.com/KontentWave/writing-injector/pull/10) published the
+approved launcher head `7dc70b2102e821e105dcf3c2b20ecf0d7323f304` and merged as
+`1c26bcd8c42265c2863b7520eb55e8c480328a06`. Read-only closeout checks confirmed
+local `main`, `origin/main` and GitHub `main` at that merge commit before creating
+the local documentation branch.
+
+| Hosted evidence | Observed result |
+|---|---|
+| [PR run](https://github.com/KontentWave/writing-injector/actions/runs/43257775769) | 302 collected, 302 passed in 155.02 seconds, zero skips |
+| [Push-to-main run](https://github.com/KontentWave/writing-injector/actions/runs/43259787477) | 302 collected, 302 passed in 145.70 seconds, zero skips |
+
+Both GitHub-hosted Windows 2022 runs used CPython 3.12.10, pytest 9.2.0,
+Ruff 0.17.4 and mypy 2.4.1. Ruff lint/format passed for four selected Python
+files; strict mypy passed for 13 source files. These are separate hosted
+observations, not additions to the earlier local 302-pass gate or permanent
+required counts. The unchanged bounded gate includes both CLI entrypoints,
+Windows junctions, offline/source-immutability regressions and native
+fake-executable launcher tests.
+
+The human offline checklist below is provided but **not executed or accepted**.
+These Phase 3 results establish no live/provider, prose-quality or
+production-readiness acceptance. The localhost picker/editor, continuity-tail
+work and its unresolved contract, automatic translation, additional paid
+benchmarks and live acceptance remain deferred. The human workflow remains
+English drafting followed by manual Slovak translation and editing.
 
 ### Human acceptance
 
@@ -696,10 +725,120 @@ Separate benign English [frame](tests/fixtures/frame_en.md),
 [candidate](tests/fixtures/candidate_en.txt) fixtures use natural, standard
 written English, with a 20-80-word slot and a 50-word, two-paragraph candidate.
 
-- **Offline:** choose an unsynchronized location outside D: and the workspace;
-  bootstrap a disposable synthetic vault with explicit paths, check idempotence
-  and `-Force`, then exercise both CLI entrypoints with `--dry-run` and
-  `--lint-only`. Review strict exit codes, redacted output, and unchanged sources.
+#### Phase 3B offline launcher checklist (not executed)
+
+For a human to execute later, using an already-installed runtime in a fresh
+PowerShell 7 session without a profile or transcript. Stop on any error or
+unexpected output. Never supply `-Generate`, even with help or safe-mode flags.
+Do not run bootstrap, install packages, create credentials/addons, pass
+`--config`, or inspect private settings/vaults. Only the three benign English
+repository fixtures below are inputs.
+
+1. Privately confirm that a fresh disposable child of `C:\` is genuinely
+   unsynchronized. If that cannot be established, stop; do not substitute D: or
+   a personal/cloud location. Before the first Python/application invocation,
+   reuse the workflow's nonredirected-ancestor guards and inherited
+   temporary/cache protections. The checks below also reject existing cloud
+   markers; a path example or environment variable alone proves nothing.
+
+   ```powershell
+   $ErrorActionPreference = 'Stop'
+   $parent = Get-Item -LiteralPath 'C:\' -Force
+   if ($parent.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+       throw '[FAIL] Redirected C: parent.'
+   }
+   $area = Join-Path $parent.FullName ('zafo-offline-' + [guid]::NewGuid().ToString('N'))
+   New-Item -ItemType Directory -Path $area | Out-Null
+   for ($dir = Get-Item -LiteralPath $area -Force; $null -ne $dir; $dir = $dir.Parent) {
+       if ($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+           throw '[FAIL] Redirected synthetic storage.'
+       }
+       foreach ($pattern in @('*.gdoc', '*.code-workspace')) {
+           if (Get-ChildItem -LiteralPath $dir.FullName -Filter $pattern -File -Force) {
+               throw '[FAIL] Synthetic storage has forbidden markers.'
+           }
+       }
+   }
+   foreach ($name in @(
+       'OPENROUTER_API_KEY', 'ZAFO_VAULT_DIR', 'GOOGLE_DRIVE_DIR',
+       'PYTHONPATH', 'PYTHONHOME', 'PYTEST_PLUGINS', 'PYTHONSTARTUP'
+   )) {
+       if (Test-Path -LiteralPath "Env:\$name") { Remove-Item -LiteralPath "Env:\$name" }
+   }
+   @{
+       TEMP = $area; TMP = $area; TMPDIR = $area
+       PYTHONDONTWRITEBYTECODE = '1'; PYTHONIOENCODING = 'utf-8'
+       PYTEST_ADDOPTS = '-p no:cacheprovider'; RUFF_NO_CACHE = '1'; NO_COLOR = '1'
+       PYTHONPYCACHEPREFIX = Join-Path $area 'bytecode'
+       MYPY_CACHE_DIR = Join-Path $area 'mypy-cache'
+       RUFF_CACHE_DIR = Join-Path $area 'ruff-cache'
+       PIP_CACHE_DIR = Join-Path $area 'pip-cache'
+   }.GetEnumerator() | ForEach-Object { Set-Item -LiteralPath "Env:\$($_.Key)" -Value $_.Value }
+   ```
+
+2. In that same session, capture fresh hashes, check bare help, and check default
+   preview **without manually adding `--dry-run`**. Expect exit 0 immediately
+   after each call, help/metadata only, and no writes. Preview must pass the
+   unchanged application storage validator; never bypass or monkeypatch it.
+
+   ```powershell
+   $repo = 'D:\zafo-injector'
+   $launcher = Join-Path $repo 'writing-injector.ps1'
+   $fixtures = Join-Path $repo 'tests\fixtures'
+   $inputs = @('frame_en.md', 'STYLE_SHEET_EN.md', 'candidate_en.txt') |
+       ForEach-Object { Join-Path $fixtures $_ }
+   $before = Get-FileHash -LiteralPath $inputs -Algorithm SHA256
+   Set-Location -LiteralPath $repo
+   & $launcher
+   if ($LASTEXITCODE -ne 0) { throw '[FAIL] Launcher help failed.' }
+   [string[]]$previewArgs = @(
+       '.\tests\fixtures\frame_en.md', '--language', 'en',
+       '--style-sheet', '.\tests\fixtures\STYLE_SHEET_EN.md',
+       '--vault-dir', (Join-Path $area 'synthetic-vault')
+   )
+   & $launcher -CliArgs $previewArgs
+   if ($LASTEXITCODE -ne 0) { throw '[FAIL] Default preview failed.' }
+   ```
+
+3. Check explicit strict lint-only after `Set-Location`, using caller-relative
+   inputs and a PowerShell string array, never a joined command. Expect exit 0,
+   structural lint metadata only, no vault access and an unchanged caller
+   location.
+
+   ```powershell
+   Set-Location -LiteralPath $fixtures
+   [string[]]$lintArgs = @(
+       'frame_en.md', '--language', 'en',
+       '--lint-only', 'candidate_en.txt', '--strict',
+       '--vault-dir', (Join-Path $area 'synthetic-vault')
+   )
+   & $launcher -CliArgs $lintArgs
+   if ($LASTEXITCODE -ne 0) { throw '[FAIL] Strict lint-only failed.' }
+   if ((Get-Location).ProviderPath -ne $fixtures) { throw '[FAIL] Caller location changed.' }
+   ```
+
+4. Expect all three source hashes unchanged and the disposable area still empty:
+   no vault, generated drafts/reports, bytecode or cache files. Compare in the
+   same session without printing sources, hashes, secrets or forwarded arguments.
+
+   ```powershell
+   $after = Get-FileHash -LiteralPath $inputs -Algorithm SHA256
+   if (Compare-Object $before $after -Property Path, Hash) { throw '[FAIL] Source hashes changed.' }
+   if (Get-ChildItem -LiteralPath $area -Force) { throw '[FAIL] Unexpected storage writes.' }
+   Write-Output '[OK] Offline integrity expectations met.'
+   Remove-Item -LiteralPath $area
+   ```
+
+   Remove only that verified-empty disposable directory, without recursion, and
+   close the disposable session to discard its environment changes. These are
+   expectations, not observed acceptance results; human execution/review remains
+   pending. Storage isolation is not a network air gap.
+
+#### Separately approved live acceptance only
+
+The procedures below require separate human transmission/spending approval;
+this documentation closeout releases no live or paid run.
+
 - **Optional live test (human only):** use synthetic Tier-1 inputs and an explicit
   disposable vault. Configure credentials privately and acknowledge that frame
   context, style anchors, instructions, and any addon are sent to OpenRouter.
