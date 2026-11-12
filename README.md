@@ -708,12 +708,22 @@ required counts. The unchanged bounded gate includes both CLI entrypoints,
 Windows junctions, offline/source-immutability regressions and native
 fake-executable launcher tests.
 
-The human offline checklist below is provided but **not executed or accepted**.
-These Phase 3 results establish no live/provider, prose-quality or
+At that checkpoint, the human offline checklist below had **not been executed
+or accepted**. The first complete human-reported English launcher offline pass
+is recorded under [Human acceptance](#human-acceptance). These automated Phase 3
+results establish no live/provider, prose-quality or
 production-readiness acceptance. The localhost picker/editor, continuity-tail
 work and its unresolved contract, automatic translation, additional paid
 benchmarks and live acceptance remain deferred. The human workflow remains
 English drafting followed by manual Slovak translation and editing.
+
+The documentation-only closeout subsequently merged in
+[#11](https://github.com/KontentWave/writing-injector/pull/11) as
+`d86b904f9cbeb42ef07c47a6cddcca59c71de6e8`. Its
+[PR run](https://github.com/KontentWave/writing-injector/actions/runs/43286320418)
+and [push-to-main run](https://github.com/KontentWave/writing-injector/actions/runs/43287023658)
+both succeeded; no newly checked test counts, timings or tool versions are
+asserted for those two runs.
 
 ### Human acceptance
 
@@ -725,10 +735,46 @@ Separate benign English [frame](tests/fixtures/frame_en.md),
 [candidate](tests/fixtures/candidate_en.txt) fixtures use natural, standard
 written English, with a 20-80-word slot and a 50-word, two-paragraph candidate.
 
-#### Phase 3B offline launcher checklist (not executed)
+#### Phase 3B human offline record (2026-11-12)
 
-For a human to execute later, using an already-installed runtime in a fresh
-PowerShell 7 session without a profile or transcript. Stop on any error or
+The human approved both languages' synthetic fixture content, not generated
+prose quality. Human-supplied English terminal output supports the first complete
+**human-reported English launcher offline pass**, not a new human Slovak runtime
+pass. The assistant did not execute it or inspect its storage, environment,
+source contents or private settings.
+
+- Before Python/application execution, the transcript reports a fresh GUID-named
+  disposable C: area, passing ancestor/marker guards, named credential/vault/cloud
+  and Python-injection overrides removed without printing values, temporary/cache
+  paths directed there, and bytecode plus pytest/Ruff caches disabled. This is not
+  independent certification of cloud synchronization, shell startup or storage.
+- Bare invocation printed shared help. Default preview, without manually supplied
+  `--dry-run`, reported `POV=male; words=20-80; context=2/2 paragraphs; language=en`,
+  English structural QA only (no lexicon or grammar checks), system/user prompt
+  roles, redacted content, no addon/credential reads, API or writes. Strict
+  lint-only after `Set-Location`, with caller-relative English inputs and a
+  PowerShell string array, reported `[PASS] words=50 score=100; language=en`.
+- Immediate nonzero-exit guards and the caller-location guard did not raise;
+  numeric exits were not separately printed. Fresh same-session SHA-256
+  comparisons of the English frame, style and candidate showed no differences;
+  hash values were not supplied. The area was empty before
+  `[OK] Offline integrity expectations met.` and its first nonrecursive removal
+  showed no error.
+- Repeating final checks after deletion produced a missing-directory error.
+  The later standalone interactive `[OK]` is not additional pass evidence.
+  This was neither a second successful run nor an application/launcher failure;
+  no fix or rerun is indicated. Disposable-session closure was advised because
+  temporary/cache paths still pointed to the deleted area, but was not confirmed.
+
+Only the bounded Phase 3 configuration/launcher increment is closed. This record
+establishes no live/provider, generated-prose-quality, formal paid benchmark or
+production-readiness acceptance and releases no deferred feature or paid run.
+
+#### Phase 3B offline launcher checklist (reference)
+
+Retained for reference, not a request for another execution. Use an
+already-installed runtime in a fresh PowerShell 7 session without a profile or
+transcript. Stop on any error or
 unexpected output. Never supply `-Generate`, even with help or safe-mode flags.
 Do not run bootstrap, install packages, create credentials/addons, pass
 `--config`, or inspect private settings/vaults. Only the three benign English
@@ -830,9 +876,9 @@ repository fixtures below are inputs.
    ```
 
    Remove only that verified-empty disposable directory, without recursion, and
-   close the disposable session to discard its environment changes. These are
-   expectations, not observed acceptance results; human execution/review remains
-   pending. Storage isolation is not a network air gap.
+   close the disposable session to discard its environment changes. The dated
+   record above reports human observations, not independent assistant
+   certification. Storage isolation is not a network air gap.
 
 #### Separately approved live acceptance only
 
