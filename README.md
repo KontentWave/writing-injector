@@ -722,8 +722,13 @@ The documentation-only closeout subsequently merged in
 `d86b904f9cbeb42ef07c47a6cddcca59c71de6e8`. Its
 [PR run](https://github.com/KontentWave/writing-injector/actions/runs/43286320418)
 and [push-to-main run](https://github.com/KontentWave/writing-injector/actions/runs/43287023658)
-both succeeded; no newly checked test counts, timings or tool versions are
-asserted for those two runs.
+both succeeded. The human offline acceptance record then merged in
+[#12](https://github.com/KontentWave/writing-injector/pull/12) as
+`6324ef5aa64d511bf5a87117c0f37c29e996b21b`, with its
+[PR run](https://github.com/KontentWave/writing-injector/actions/runs/43294541419)
+and [push-to-main run](https://github.com/KontentWave/writing-injector/actions/runs/43295284010)
+also succeeding; no newly checked test counts, timings or tool versions are
+asserted for those four documentation-gate runs.
 
 ### Human acceptance
 
@@ -769,6 +774,46 @@ source contents or private settings.
 Only the bounded Phase 3 configuration/launcher increment is closed. This record
 establishes no live/provider, generated-prose-quality, formal paid benchmark or
 production-readiness acceptance and releases no deferred feature or paid run.
+
+#### Phase 3 diagnostic English smoke checkpoint (2026-11-12; recorded 2026-11-13)
+
+After preparing non-secret `settings.toml` defaults and unchanged copies of the
+three benign English repository fixtures outside an explicitly selected,
+human-confirmed isolated C: vault, the human ran an offline `--config` +
+`--vault-dir` + `--dry-run` launcher preview (`Preview exit=0`, no credential or
+addon reads, no API calls or writes, empty disposable temporary directory
+verified and removed).
+
+With public OpenRouter metadata rechecked (`anthracite-org/magnum-v4-72b`
+status-0 `fp8` endpoint; catalog USD 2.50 / 5.00 per million input/output
+tokens) and separate explicit human approval of synthetic prompt transmission,
+the exact command and a proposed human-monitored USD 0.10 allowance (not a
+CLI-enforced cap), the human executed one non-strict diagnostic candidate via
+`writing-injector.ps1 -Generate` (`--config`, `--language en`, `--style-sheet`,
+`--vault-dir`, `--model anthracite-org/magnum-v4-72b`, `--candidates 1`, no
+addon, no `--print-output`):
+
+- In-session preflight `--dry-run` (`exit=0`), strict `--lint-only` on the
+  50-word synthetic control (`score=100`, `exit=0`), SHA-256 fixture-equality
+  guards, no-addon/no-conflict checks and C: temporary/bytecode protections all
+  passed before generation.
+- Diagnostic generation reported **85 words** against the unchanged **20-80**
+  target, **3 paragraphs** (within 2-4), **score 75**, one hard `WORD_COUNT`
+  failure (`line=1`), zero warnings, `Generation exit=0`, and both
+  `frame_en.candidates.md` and `frame_en.merged.md` written inside the selected
+  C: vault's `output` directory for manual review. Fresh before/after SHA-256
+  hashes for inputs and `settings.toml` matched, and the empty disposable
+  temporary directory was removed.
+- The human reviewed the generated English prose locally, judged its text
+  quality satisfactory while treating the minor length overrun as secondary for
+  this smoke, and reaffirmed skipping further Slovak generation trials in favor
+  of **English drafting followed by manual Slovak translation and editing**.
+- The assistant did not execute the live request or inspect the private vault,
+  settings, credentials or prose-bearing files. Actual HTTP attempts (up to
+  three permitted), provider, token counts, latency and billed USD were not
+  supplied. Diagnostic publication does not reclassify the `WORD_COUNT` failure
+  as a structural QA pass, and this smoke establishes neither formal benchmark
+  completion nor production readiness.
 
 #### Phase 3B offline launcher checklist (reference)
 
