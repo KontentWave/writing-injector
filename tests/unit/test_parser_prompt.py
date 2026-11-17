@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from zafo_injector.markdown import SourceFormatError, numbered_section
-from zafo_injector.models import FrameDocument
+from zafo_injector.models import FrameDocument, Language
 from zafo_injector.parser import SlotParseError, parse_frame
 from zafo_injector.prompt_builder import build_messages
 
@@ -95,6 +95,48 @@ def test_prompt_sections_addon_and_female(
     assert "ODSEK PRED" in messages[1]["content"]
     assert "POKYNY PRE SCÉNU" in messages[1]["content"]
     assert "ODSEK PO" in messages[1]["content"]
+
+
+@pytest.mark.parametrize("language", ["sk", "en"])
+@pytest.mark.parametrize("sample_section", ["", "## 1. Sample\n \t\n"])
+def test_prompt_allows_absent_or_empty_voice_sample(
+    frame: FrameDocument,
+    english_frame: FrameDocument,
+    tmp_path: Path,
+    language: Language,
+    sample_section: str,
+) -> None:
+    doc = english_frame if language == "en" else frame
+    style = tmp_path / "synthetic-style.md"
+    style.write_text(
+        sample_section + "## 2. Other\nThis section must not be used.\n\n"
+        "## 6. Rules\nUse a clear, restrained voice.\n",
+        encoding="utf-8",
+    )
+    addon = tmp_path / "synthetic-addon.txt"
+    addon.write_text("Keep the staging clear.", encoding="utf-8")
+    system, user = (message["content"] for message in build_messages(doc, style, addon))
+    assert system.startswith("SLOT RULES:\nUse a clear, restrained voice.")
+    assert "STYLE SAMPLE:" not in system
+    assert "This section must not" not in system
+    assert "LOCAL ADDON:\nKeep the staging clear." in system
+    language_name = "English" if language == "en" else "Slovak"
+    assert f"Write only in {language_name}, including dialogue." in system
+    assert doc.slot.instructions in user
+    assert all(paragraph in user for paragraph in (*doc.context_before, *doc.context_after))
+
+
+@pytest.mark.parametrize("rules_section", ["", "## 6. Rules\n \t\n"])
+def test_prompt_requires_nonempty_slot_rules(
+    frame: FrameDocument, tmp_path: Path, rules_section: str
+) -> None:
+    style = tmp_path / "synthetic-style.md"
+    style.write_text(
+        "## 1. Sample\nAn ordinary morning.\n\n" + rules_section,
+        encoding="utf-8",
+    )
+    with pytest.raises(SourceFormatError, match="section 6"):
+        build_messages(frame, style, None)
 
 
 def test_numbered_section_missing() -> None:

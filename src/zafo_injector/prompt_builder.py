@@ -8,7 +8,7 @@ def build_messages(
     doc: FrameDocument, style_sheet_path: Path, tier4_addon_path: Path | None
 ) -> list[dict[str, str]]:
     style = style_sheet_path.read_text(encoding="utf-8-sig")
-    sample = numbered_section(style, 1)
+    sample = numbered_section(style, 1, required=False)
     template = numbered_section(style, 6)
     if doc.language == "sk":
         # Normalize the male anchor before applying the authoritative POV instruction.
@@ -28,7 +28,9 @@ def build_messages(
             "Use English spelling, vocabulary, and grammar.\n"
         )
         labels = ("PARAGRAPH BEFORE", "SCENE INSTRUCTIONS", "PARAGRAPH AFTER")
-    system = f"STYLE SAMPLE:\n{sample}\n\nSLOT RULES:\n{template}"
+    system = f"SLOT RULES:\n{template}"
+    if sample:
+        system = f"STYLE SAMPLE:\n{sample}\n\n{system}"
     if tier4_addon_path is not None:
         addon = tier4_addon_path.read_text(encoding="utf-8-sig").strip()
         if addon:

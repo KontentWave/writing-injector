@@ -11,7 +11,7 @@
 - **Phase 3 current checkpoint:** Explicit non-secret TOML defaults and the thin PowerShell launcher are implemented, published, merged and automated-offline-validated through [PR #10](https://github.com/KontentWave/writing-injector/pull/10), with closeout/smoke records merged through [PR #11](https://github.com/KontentWave/writing-injector/pull/11), [PR #12](https://github.com/KontentWave/writing-injector/pull/12), and [PR #13](https://github.com/KontentWave/writing-injector/pull/13). With the [human-reported English offline pass](#phase-3-human-offline-acceptance-record-2026-11-12) and [configured diagnostic English smoke](#phase-3-configured-diagnostic-english-smoke-checkpoint-2026-11-12-recorded-2026-11-13) complete, the [2026-11-13 workflow decision](#settled-english-first-cli-workflow-decision-2026-11-13) steps directly to day-to-day CLI launcher + VS Code usage without further synthetic smokes or a localhost picker. See [README](../README.md#short-manual) for the streamlined daily manual; offline/smoke records still do not certify provider SLAs or automated prose safety.
 - **Upstream Content Interfaces (Read-Only):**  
   - Story frames: `../zafo-shorts/blog/posts/post_XXX.md` (e.g., `post_002.md`)  
-  - Style & prompt anchors: `../zafo-shorts/blog/docs/STYLE_SHEET.md` (§1 Pinned Sample, §6 Slot-Injector Prompt)  
+  - Style & prompt anchors: `../zafo-shorts/blog/docs/STYLE_SHEET.md` (optional §1 Pinned Sample, required nonempty §6 Slot-Injector Prompt)
   - Slovak QA rules: `../zafo-shorts/blog/docs/SLOVAK_LEXICON.md` (§3 Czechism Trap Table, §4 English Calque Kill-List, §6 `TIER4_ADDON.txt` skeleton)  
 - **External Vault Boundary (Outside Google Drive & Workspace):**  
   - **Confirmed constraint:** the whole `D:\` drive is forbidden for vault storage and generated output, including resolved links.  
@@ -67,7 +67,7 @@ zafo-injector/
 │       ├── model_profiles.py          # Static validated matrix registry, overrides, and global request budget
 │       ├── config.py                  # VaultConfig loader (.env + air-gap path containment check)
 │       ├── parser.py                  # Extracts POV metadata, slot instructions, word-target bounds, and context window
-│       ├── prompt_builder.py          # Combines STYLE_SHEET (§1 + §6) + TIER4_ADDON.txt + sliced frame context
+│       ├── prompt_builder.py          # Combines STYLE_SHEET (§6 + optional §1) + TIER4_ADDON.txt + sliced frame context
 │       ├── slovak_lint.py             # Shared structural QA; Slovak-only lexicon and morphological POV checks
 │       ├── openrouter_client.py       # Shared single/matrix requests, global concurrency, bounded retries, redacted failures
 │       ├── renderer.py                # Legacy drafts or report-only *.arena.md/*.arena.json, shared safe publication
@@ -155,7 +155,7 @@ Deliver a tested, storage-isolated CLI pipeline that parses hybrid story frames,
    - Slice up to `window_paragraphs` clean prose paragraphs before and after the slot (skipping HTML comments and `#` headings).  
 4. **Prompt Assembler (`src/zafo_injector/prompt_builder.py`):**  
    - Implement `build_messages(doc: FrameDocument, style_sheet_path: Path, tier4_addon_path: Path | None) -> list[dict[str, str]]`.  
-   - Extract §1 and §6 from the supplied style sheet, adapt Slovak female POV anchors only in Slovak mode, append a non-empty local addon, and construct `system` \+ `user` messages. Context labels are Slovak in `sk` and English in `en`; the final authoritative contract selects language/POV/length/paragraphs without overriding style register.  
+   - Extract required nonempty §6 and optional §1 from the supplied style sheet. In both languages, §1 may be absent or empty; omit the `STYLE SAMPLE` block in that case and keep existing prompts unchanged when a sample is supplied. No other style-sheet sections are included, so voice/register guidance without a sample belongs in §6. Adapt Slovak female POV anchors only in Slovak mode, append a non-empty local addon, and construct `system` \+ `user` messages. Context labels are Slovak in `sk` and English in `en`; the final authoritative contract selects language/POV/length/paragraphs without overriding style register.
 5. **Shared QA with Slovak Lexicon & Morphology (`src/zafo_injector/slovak_lint.py`):**  
    - Implement `LexiconRules.from_markdown(lexicon_path: Path) -> LexiconRules` parsing banned Czechisms (§3) and English AI calques (§4) from `SLOVAK_LEXICON.md`, supplemented by built-in inflected regex patterns (case-insensitive Unicode word boundaries `\b...\b`).  
    - Implement `lint_candidate(text: str, doc: FrameDocument, rules: LexiconRules | None = None) -> LintReport`. Slovak requires rules; English accepts only `None` and never reads a default lexicon. All following vocabulary/gender checks are Slovak-only:  

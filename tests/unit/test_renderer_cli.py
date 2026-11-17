@@ -94,9 +94,21 @@ def test_renderer_rechecks_drive_boundary(
         )
 
 
+@pytest.mark.parametrize("sample_section", [None, "", "## 1. Sample\n \t\n"])
 def test_cli_dry_run_never_reads_private_files_or_calls_api(
-    cli_args: list[str], vault: Path, capsys: pytest.CaptureFixture[str]
+    cli_args: list[str],
+    vault: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    sample_section: str | None,
 ) -> None:
+    if sample_section is not None:
+        style = tmp_path / "synthetic-style.md"
+        style.write_text(
+            sample_section + "## 6. Rules\nUse a clear, restrained voice.\n",
+            encoding="utf-8",
+        )
+        cli_args += ["--style-sheet", str(style)]
     (vault / ".env").write_bytes(b"\xff")
     (vault / "TIER4_ADDON.txt").write_bytes(b"\xff")
     assert cli.main(cli_args + ["--dry-run"]) == 0

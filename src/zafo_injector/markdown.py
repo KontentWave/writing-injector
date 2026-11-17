@@ -8,7 +8,7 @@ class SourceFormatError(ValueError):
 _HEADING = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 
 
-def numbered_section(text: str, number: int) -> str:
+def numbered_section(text: str, number: int, *, required: bool = True) -> str:
     headings: list[re.Match[str]] = []
     fence = ""
     offset = 0
@@ -42,6 +42,8 @@ def numbered_section(text: str, number: int) -> str:
         if result:
             return result
         break
+    if not required:
+        return ""
     raise SourceFormatError(f"Required nonempty Markdown section {number} was not found.")
 
 
