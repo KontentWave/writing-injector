@@ -36,7 +36,7 @@ Both `.\.venv\Scripts\python.exe -m zafo_injector` and `.\.venv\Scripts\zafo-inj
 **Storage and privacy boundaries:**
 - **Drive `D:\` and the repository workspace are forbidden** for vaults and generated outputs (including through symlinks or junctions).
 - Place your vault on a genuinely unsynchronized local `C:` directory outside Google Drive / cloud folders.
-- **Storage isolation is not a network air gap:** a human `-Generate` run sends the style anchors, slot instructions, 2-paragraph before/after context, and any `TIER4_ADDON.txt` to OpenRouter over HTTPS.
+- **Storage isolation is not a network air gap:** a human `-Generate` run sends the style sheet's slot rules and any supplied voice sample, slot instructions, 2-paragraph before/after context, and any `TIER4_ADDON.txt` to OpenRouter over HTTPS.
 - Coding assistants must never inspect real vaults or execute live generation (see [AGENTS.md](./AGENTS.md)).
 
 **Recommended external layout (example under `%LOCALAPPDATA%\WritingInjector`):**
@@ -76,7 +76,8 @@ vault_dir = 'vault'
    ```
    Use `words` when `language = "en"` (`slov` when `language = "sk"`), or omit `: MIN-MAX ...` to use the `140-220` default.
 3. **Context window (`2` before / `2` after):** the parser sends **only up to two prose paragraphs before and two after the slot**—not the full chapter. Put any character traits, relationship dynamics, or physical staging not visible in those four neighboring paragraphs into the slot instructions, style sheet, or `TIER4_ADDON.txt`.
-4. **Style sheet sections:** must include numbered ATX headings `1.` (Pinned Sample) and `6.` (Slot Rules), e.g. `## 1. Pinned Sample` and `## 6. Slot-Injector Prompt`.
+4. **Style sheet sections:** a nonempty numbered ATX section `6.` (Slot Rules), e.g. `## 6. Slot-Injector Prompt`, is required. Section `1.` (Pinned Sample) is optional in both languages: omit it or leave its body empty to generate without a voice sample. Supplied samples are used as before.
+   Only sections `1.` and `6.` are included from the style sheet; put voice/register guidance in section `6.` when not supplying a sample.
 5. **Optional multi-track layout (`--track blog|serial|dark-romance` + `--tracks-root ROOT`):** expects `ROOT\<track>\docs\STYLE_SHEET_EN.md` for English (`STYLE_SHEET.md` + `ROOT\docs\SLOVAK_LEXICON.md` for Slovak), unless overridden via `--style-sheet` / `--lexicon`.
 
 ### 4. Daily Commands (`writing-injector.ps1`)
